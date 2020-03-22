@@ -21,10 +21,10 @@ arg('--use_crop', type=distutils.util.strtobool, default='true')
 arg('--learning_rate', type=float, default=0.001)
 
 arg('--batch_size', type=int, default=1)
-arg('--auto_dataset_dir', default='/home/user/projects/agrivision/data/Agriculture-Vision/train_val')
-arg('--manual_dataset_dir', default='/home/user/projects/agrivision/data/Agriculture-Vision/train_val')
-arg('--test_data_dir', default='/mnt/storage_4tb/ymi/geo_data/angle_net_data/dist_maps_train')
-arg('--test_mask_dir', default='/mnt/storage_4tb/ymi/geo_data/angle_net_data/dist_maps_train')
+arg('--auto_dataset_dir', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_val')
+arg('--manual_dataset_dir', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_val')
+arg('--test_data_dir', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_val')
+arg('--test_mask_dir', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_val')
 
 arg('--class_names', default=['cloud_shadow', 'double_plant', 'planter_skip', 'standing_water', 'waterway', 'weed_cluster'])
 arg('--models_dir', default='models')
@@ -36,9 +36,9 @@ arg('--network', default='instance_unet')
 arg('--net_alias', default='')
 arg('--preprocessing_function', default='tf')
 arg('--mask_suffix', default='.png')
-arg('--train_df', default='/home/user/projects/agrivision/data/Agriculture-Vision/train_field_split.csv') # /mnt/storage/ymi/geo_data/train_only_man_agr_7116.df
-arg('--val_df', default='/home/user/projects/agrivision/data/Agriculture-Vision/val_field_split.csv')
-arg('--test_df', default='/mnt/storage_4tb/ymi/geo_data/angle_net_data/row_data/1-62/1_3338_6676_0_3338.geojson') # '/mnt/storage/ymi/geo_data/test_nrg_3580.df'
+arg('--train_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_field_split.csv') # /mnt/storage/ymi/geo_data/train_only_man_agr_7116.df
+arg('--val_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/val_field_split.csv')
+arg('--test_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/val_field_split.csv') # '/mnt/storage/ymi/geo_data/test_nrg_3580.df'
 arg('--inp_list', default='input_list_pegasus2_5E') # latest df train_man_nrg_cleaned_6116
 arg('--r_type', default='rgb', choices=['nrg', 'rgg', 'rgb'])
 
