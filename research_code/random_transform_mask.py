@@ -139,7 +139,6 @@ class ImageWithMaskFunction:
                 w_start = (ori_width - width) // 2
             img_crop = batch_x[:, h_start:h_start + height, w_start:w_start + width, :]
             for cls in classes:
-                print(masks_x[cls])
                 mask_crop[cls] = masks_x[cls][:, h_start:h_start + height, w_start:w_start + width, :]
             return img_crop, mask_crop
         else:

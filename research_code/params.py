@@ -36,9 +36,9 @@ arg('--network', default='instance_unet')
 arg('--net_alias', default='')
 arg('--preprocessing_function', default='tf')
 arg('--mask_suffix', default='.png')
-arg('--train_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_field_split.csv') # /mnt/storage/ymi/geo_data/train_only_man_agr_7116.df
-arg('--val_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/val_field_split.csv')
-arg('--test_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/val_field_split.csv') # '/mnt/storage/ymi/geo_data/test_nrg_3580.df'
+arg('--train_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_simple.csv') # /mnt/storage/ymi/geo_data/train_only_man_agr_7116.df
+arg('--val_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/val_simple.csv')
+arg('--test_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/val_simple.csv') # '/mnt/storage/ymi/geo_data/test_nrg_3580.df'
 arg('--inp_list', default='input_list_pegasus2_5E') # latest df train_man_nrg_cleaned_6116
 arg('--r_type', default='rgb', choices=['nrg', 'rgg', 'rgb'])
 
@@ -58,7 +58,7 @@ arg('--val_data_dir_name', default='val')
 arg('--train_mask_dir_name', default='train_masks')
 arg('--val_mask_dir_name', default='val_masks')
 
-arg('--threshold', type=float, default=0.7)
+arg('--threshold', type=float, default=0.5)
 
 arg('--dirs_to_ensemble', nargs='+')
 arg('--ensembling_strategy', default='average')
