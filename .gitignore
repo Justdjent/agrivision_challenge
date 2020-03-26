@@ -2,5 +2,6 @@
 data
 logs
 models
-notebooks/.ipynb_checkpoints
+**/.ipynb_checkpoints
+*.csv
 __pycache__
