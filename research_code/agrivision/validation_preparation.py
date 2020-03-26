@@ -4,6 +4,7 @@ import argparse
 
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 
 from keras.utils import Sequence
 from classification_models import Classifiers
@@ -12,6 +13,13 @@ from keras.callbacks import ModelCheckpoint
 from keras.layers import GlobalAveragePooling2D, Dense
 from keras.layers import Activation
 from keras.models import Model
+from keras.backend.tensorflow_backend import set_session
+
+
+def setup_env():
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    set_session(tf.Session(config=config))
 
 
 def parse_args():
@@ -60,12 +68,14 @@ class DataSequence(Sequence):
 
 if __name__ == "__main__":
     args = parse_args()
+    setup_env()
     model = make_model(args.model)
     model.compile(loss='binary_crossentropy',
                   optimizer='adam',
                   metrics=['accuracy'])
     train_df = pd.read_csv(args.input_csv)
-    train_generator = DataSequence((args.data_folder + train_df["path"]).values, train_df["class"].values, 1)
+    train_generator = DataSequence((args.data_folder + train_df["path"]).values, train_df["class"].values,
+                                   args.batch)
     os.makedirs("weights", exist_ok=True)
     checkpoint = ModelCheckpoint(f"weights/{args.model}" + "_{epoch:02d}-{acc:.2f}.h5",
                                  monitor='acc',
