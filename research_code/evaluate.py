@@ -15,14 +15,14 @@ def dice_coef(y_true, y_pred, smooth=1.0):
     y_true_f = y_true.flatten()
     y_pred_f = y_pred.flatten()
     intersection = np.sum(y_true_f * y_pred_f)
-    return (2. * intersection + smooth) / (np.sum(y_true_f) + np.sum(y_pred_f) + smooth)
+    return (2. * intersection) / (np.sum(y_true_f) + np.sum(y_pred_f) + smooth)
 
 
 def iou(y_true, y_pred, smooth=0.00001):
     y_true_f = y_true.flatten()
     y_pred_f = y_pred.flatten()
     intersection = np.sum(y_true_f * y_pred_f)
-    return (2. * intersection + smooth) / (np.sum(y_true_f) + np.sum(y_pred_f) + smooth)
+    return (2. * intersection) / (np.sum(y_true_f) + np.sum(y_pred_f) + smooth)
 
 
 def calculate_metrics(base_mask, transformed_mask, eta=0.0000001):
@@ -58,7 +58,8 @@ def evaluate(masks_dir, results_dir, tfr_df_name):
     pbar = tqdm()
     for num, row in test_df.iterrows():
         mean_iou = []
-        for cls in args.class_names:
+        mixed_prediction = np.zeros((512, 512))
+        for num, cls in enumerate(args.class_names):
             result_path = os.path.join(results_dir, "labels", cls, row['name'])
             result = cv2.imread(result_path, cv2.IMREAD_GRAYSCALE)
             mask_path = os.path.join(masks_dir, "labels", cls, row['name'].replace(".jpg", ".png"))
@@ -66,7 +67,8 @@ def evaluate(masks_dir, results_dir, tfr_df_name):
             boundary = cv2.imread(boundary_path, cv2.IMREAD_GRAYSCALE)
             result[boundary != 255] = 0
             mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-            result = result > thresh * 255
+            # result = result > thresh * 255
+            # mixed_prediction[bin_mask] = num + 1
             mask = mask > thresh * 255
             cur_iou = iou(mask, result)
             test_df.loc[num, "{}_iou".format(cls)] = cur_iou
