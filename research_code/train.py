@@ -114,8 +114,8 @@ def main():
         validation_data=val_generator,
         validation_steps=len(val_df) / args.batch_size + 1,
         callbacks=callbacks,
-        max_queue_size=1,
-        workers=1)
+        max_queue_size=50,
+        workers=4)
 
 
 if __name__ == '__main__':

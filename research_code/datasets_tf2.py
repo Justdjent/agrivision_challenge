@@ -262,13 +262,18 @@ class DataGenerator_angles(tf.keras.utils.Sequence):
             img_path = os.path.join(
                 self.img_dir, 'images', "rgb", filename['name'])
             img = cv2.imread(img_path)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            try:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            except Exception as error:
+                print(img_path)
+                print(error)
             img = cv2.resize(img, self.out_size)
 
             # getmasks
             for cls in self.classes:
                 mask_path = os.path.join(self.img_dir, 'labels', cls, filename['name'])
                 mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
+                mask = mask > 0
                 # print(mask.shape)
                 class_labels[cls].append(mask)
 
@@ -354,7 +359,11 @@ class DataGenerator_lstm(tf.keras.utils.Sequence):
             img_path = os.path.join(
                 self.img_dir, str(train_batch['folder'].values[0]), 'images', train_batch['img_name'].values[0])
             img = cv2.imread(img_path)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            try:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            except Exception as error:
+                print(img_path)
+                print(error)
             img_side = img.shape[0]
             img = cv2.resize(img, self.out_size)
             full_sequence = convert_points(img_side, train_batch, output_size=32)

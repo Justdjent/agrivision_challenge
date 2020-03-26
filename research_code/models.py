@@ -53,27 +53,26 @@ def cse_block(prevlayer, prefix):
     return x
 
 
-def csse_resnet50_fpn_instance(input_shape, channels=1, activation="sigmoid"):
+def csse_resnet50_fpn_instance(input_shape, channels=1, activation="sigmoid", class_names=args.class_names):
     resnet_base = ResNet50(input_shape=input_shape, include_top=False)
 
     for l in resnet_base.layers:
         l.trainable = True
 
-    conv1 = resnet_base.get_layer("activation_1").output
+    conv1 = resnet_base.get_layer("activation").output
     conv1 = csse_block(conv1, "csse_1")
-    resnet_base.get_layer("max_pooling2d_1")(conv1)
-    conv2 = resnet_base.get_layer("activation_10").output
-    conv2 = csse_block(conv2, "csse_10")
+    resnet_base.get_layer("max_pooling2d")(conv1)
+    conv2 = resnet_base.get_layer("activation_9").output
+    conv2 = csse_block(conv2, "csse_ngle_net9")
     resnet_base.get_layer("res3a_branch2a")(conv2)
-    conv3 = resnet_base.get_layer("activation_22").output
-    conv3 = csse_block(conv3, "csse_22")
+    conv3 = resnet_base.get_layer("activation_21").output
+    conv3 = csse_block(conv3, "csse_21")
     resnet_base.get_layer("res4a_branch2a")(conv3)
-    conv4 = resnet_base.get_layer("activation_40").output
-    conv4 = csse_block(conv4, "csse_40")
+    conv4 = resnet_base.get_layer("activation_39").output
+    conv4 = csse_block(conv4, "csse_39")
     resnet_base.get_layer("res5a_branch2a")(conv4)
-    conv5 = resnet_base.get_layer("activation_49").output
-    conv5 = csse_block(conv5, "csse_49")
-    resnet_base.get_layer("avg_pool")(conv5)
+    conv5 = resnet_base.get_layer("activation_48").output
+    conv5 = csse_block(conv5, "csse_48")
     P1, P2, P3, P4, P5 = create_pyramid_features(conv1, conv2, conv3, conv4, conv5)
     x = concatenate(
         [
@@ -88,9 +87,10 @@ def csse_resnet50_fpn_instance(input_shape, channels=1, activation="sigmoid"):
     x = UpSampling2D()(x)
     x = conv_relu(x, 64, 3, (1, 1), name="up5_conv1")
     x = conv_relu(x, 64, 3, (1, 1), name="up5_conv2")
-    semantic = Conv2D(channels, (1, 1), activation=activation, name="semantic")(x)
-    instance = Conv2D(channels, (1, 1), activation=activation, name="instance")(x)
-    model = Model(resnet_base.input, [semantic, instance])
+    output_dict = {}
+    for cls in class_names:
+        output_dict[cls] = Conv2D(1, (1, 1), activation="sigmoid", name=cls)(x)
+    model = Model(resnet_base.input, output_dict)
     return model
 
 
