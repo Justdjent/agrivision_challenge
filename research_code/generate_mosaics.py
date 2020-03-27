@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 def generate_mosaics(dataframe_path, save_folder, dataset_path):
     src = rasterio.open("/home/user/projects/geo/alignment-dev/1-167/non_aligned/project_transparent_mosaic_red.tif")
-
+    print(src.meta)
     full_df = pd.read_csv(dataframe_path)
     full_df['id'] = full_df['name'].str.split(".", n=1, expand=True)[0]
     full_df['coords'] = full_df['id'].str.split("_", n=1, expand=True)[1]
@@ -34,10 +34,11 @@ def generate_mosaics(dataframe_path, save_folder, dataset_path):
                 "dtype": 'uint8',
                 "count": 3,
                 #166021.44 0.00
-                "transform": Affine(1, 0, 166021.44, 0, 1, 0),
-                'driver': 'GTiff'
+                "transform": Affine(0.1, 0, 166021.44, 0, -0.1, 0),
+                'driver': 'GTiff',
+                'tiled': True,
+                'block_size': 256
                 }
-        print(height, width)
         filename = os.path.join(save_folder, field + ".tif")
         with rasterio.open(filename, "w", **meta) as dst:
             for num, row in field_df.iterrows():
