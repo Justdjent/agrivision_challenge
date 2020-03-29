@@ -3,4 +3,5 @@ data
 logs
 models
 **/.ipynb_checkpoints
+*.csv
 __pycache__
