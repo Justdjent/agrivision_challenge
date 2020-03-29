@@ -252,12 +252,28 @@ class DataGenerator_angles(tf.keras.utils.Sequence):
         if self.shuffle == True:
             sklearn.utils.shuffle(self.filenames)
 
+    def read_masks_borders(self, name):
+        border_path = os.path.join(self.img_dir, 'boundaries', name.replace(".jpg", ".png"))
+        border_img = cv2.imread(border_path)
+        mask_path = os.path.join(self.img_dir, 'masks', name.replace(".jpg", ".png"))
+        if os.path.exists(mask_path):
+            mask_img = cv2.imread(mask_path)
+        else:
+            mask_img = np.ones(border_img.shape)
+        
+        mask_img = mask_img * border_img
+        mask_img = mask_img > 0
+        mask_img = np.invert(mask_img)
+        return mask_img
+
+
     def __data_generation(self, list_IDs_temp):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
         train_batch = list_IDs_temp
         batch_x = []
         class_labels = {cls: [] for cls in self.classes}
+
         for ind, filename in train_batch.iterrows():
             img_path = os.path.join(
                 self.img_dir, 'images', "rgb", filename['name'])
@@ -267,6 +283,8 @@ class DataGenerator_angles(tf.keras.utils.Sequence):
             except Exception as error:
                 print(img_path)
                 print(error)
+            not_valid_mask = self.read_masks_borders(filename['name'])
+            img[not_valid_mask] = 0
             img = cv2.resize(img, self.out_size)
 
             # getmasks
