@@ -5,12 +5,7 @@ import keras.backend as K
 import numpy as np
 #from keras.preprocessing.image import transform_matrix_offset_center, apply_transform, random_channel_shift, flip_axis, \
 from keras.preprocessing.image import    load_img, img_to_array
-from albumentations import (
-    HorizontalFlip, IAAPerspective, ShiftScaleRotate, CLAHE, RandomRotate90,
-    Transpose, ShiftScaleRotate, Blur, OpticalDistortion, GridDistortion, HueSaturationValue,
-    IAAAdditiveGaussianNoise, GaussNoise, MotionBlur, MedianBlur, IAAPiecewiseAffine,
-    IAASharpen, IAAEmboss, RandomContrast, RandomBrightness, Flip, OneOf, Compose, RGBShift, Rotate, Resize
-)
+import albumentations as albu
 import cv2
 
 class ImageWithMaskFunction:
@@ -30,88 +25,9 @@ class ImageWithMaskFunction:
         return line_tree_mask, line_gap_mask, mask
 
 
-    def mask_pred(self, batch_x, filenames, img_auto_dir, aug=False):
-        mask_pred = np.zeros((len(batch_x), self.out_size[0], self.out_size[1], 1), dtype=K.floatx())
-        mask_pred[:, :, :, :] = 0.
-        angle_pred = np.zeros((len(batch_x), self.out_size[0], self.out_size[1], 1), dtype=K.floatx())
-        angle_pred[:, :, :, :] = 0.
-        border_pred = angle_pred.copy()
-        augmentation = strong_aug(p=0.9)
-        for i, (ind, j) in enumerate(filenames.iterrows()):
-            fname = j['name']
-            mask = os.path.join(img_auto_dir, str(j['folder']), 'masks', fname)
-            edge = os.path.join(img_auto_dir, str(j['folder']), 'edges', fname)
-            bin_mask = os.path.join(img_auto_dir, str(j['folder']), 'bin_masks', fname)
-            # mask_img = load_img(mask, grayscale=True, target_size=(self.out_size[0], self.out_size[1]))
-            try:
-                mask_img = img_to_array(load_img(mask, grayscale=True).resize(self.out_size))
-                #edge_img = img_to_array(load_img(edge, grayscale=True).resize(self.out_size))
-                if os.path.exists(bin_mask):
-                    bin_mask_img = img_to_array(load_img(bin_mask, grayscale=True).resize(self.out_size))
-                else:
-                    bin_mask_img = np.zeros(mask_img.shape)
-            except:
-                print('hi')
-                print(mask)
-                raise ValueError(mask)
-            if mask_img.shape[:2] != self.out_size:
-                _, mask_img = pad_img(None, mask_img, self.out_size)
-            line_tree_mask, line_gap_mask, mask = self.prepare_lines(bin_mask_img, mask_img)
-            kernel = np.ones((5, 5))
-            mask_pred[i, :, :, :] = line_tree_mask
-            angle_pred[i, :, :, :] = line_gap_mask
-            tree_dil = cv2.dilate(line_tree_mask.astype(np.uint8), kernel, iterations=1)
-            gap_dil = cv2.dilate(line_gap_mask.astype(np.uint8), kernel, iterations=1)
-            intersection = tree_dil * gap_dil
-            border_pred[i, :, :, :] = np.expand_dims(intersection > 0, axis=-1)
-            # mask_pred[i, :, :, :] = mask_img / 255
-            # angle_pred[i, :, :, :] = (mask_img > 1) & (200 > mask_img)
-            # border_pred[i, :, :, :] = mask_img < 200
-            # border_pred[i, :, :, :] = mask_img * (np.pi / 180)
-            #edge_img[mask_img > 0] = 0
-            #angle_pred[i, :, :, :] = edge_img > 0
-            #
-            if aug:
-                data = {"image": batch_x[i, :, :, :].astype(np.uint8),
-                        'mask': mask_pred[i, :, :, :].astype(np.float32),
-                        'angle': angle_pred[i, :, :, :].astype(np.float32),
-                        'border': border_pred[i, :, :, :].astype(np.float32)}
-                augmented = augmentation(**data)
-                try:
-                    batch_x[i, :, :, :], mask_pred[i, :, :, :], angle_pred[i, :, :, :], border_pred[i, :, :, :] = augmented["image"],\
-                                                                 augmented['mask'].reshape((augmented['mask'].shape[0],
-                                                                                                                augmented['mask'].shape[1],
-                                                                                                                1)),\
-                                                                 augmented['angle'].reshape((augmented['angle'].shape[0],
-                                                                                           augmented['angle'].shape[1],
-                                                                                           1)),\
-                                                                    augmented['border'].reshape((augmented['border'].shape[0],
-                                                                                                augmented['border'].shape[1],
-                                                                                                1))
-                except:
-                    print('hi')
-
-        if self.crop_size:
-            height = self.crop_size[0]
-            width = self.crop_size[1]
-            ori_height = self.out_size[0]
-            ori_width = self.out_size[1]
-            if aug:
-                h_start = random.randint(0, ori_height - height - 1)
-                w_start = random.randint(0, ori_width - width - 1)
-            else:
-                # validate on center crops
-                h_start = (ori_height - height) // 2
-                w_start = (ori_width - width) // 2
-            MASK_CROP = mask_pred[:, h_start:h_start + height, w_start:w_start + width, :]
-            ANGLE_CROP = angle_pred[:, h_start:h_start + height, w_start:w_start + width, :]
-            BORDER_CROP = angle_pred[:, h_start:h_start + height, w_start:w_start + width, :]
-            return batch_x[:, h_start:h_start + height, w_start:w_start + width, :], MASK_CROP, ANGLE_CROP, BORDER_CROP
-        else:
-            return batch_x, mask_pred
-
+    
     def mask_pred_angles(self, batch_x, masks_x, classes, aug=False):
-        augmentation = strong_aug(p=0.6)
+        augmentation = fixed_aug(p=0.6)
         for i in range(len(batch_x)):
             if aug:
                 data = {"image": batch_x[i, :, :, :].astype(np.uint8)}
@@ -308,35 +224,75 @@ def unpad(img, pads):
 # horizontal_flip=True,
 # vertical_flip=True)
 def strong_aug(p=0.5):
-    return Compose([
-        RandomRotate90(),
-        Flip(),
-        Transpose(),
-        OneOf([
-            IAAAdditiveGaussianNoise(),
-            GaussNoise(),
+    return albu.Compose([
+        albu.RandomRotate90(),
+        albu.Flip(),
+        albu.Transpose(),
+        albu.OneOf([
+            albu.IAAAdditiveGaussianNoise(),
+            albu.GaussNoise(),
         ], p=0.2),
-        OneOf([
-            MotionBlur(p=0.2),
-            MedianBlur(blur_limit=3, p=0.1),
-            Blur(blur_limit=3, p=0.1),
+        albu.OneOf([
+            albu.MotionBlur(p=0.2),
+            albu.MedianBlur(blur_limit=3, p=0.1),
+            albu.Blur(blur_limit=3, p=0.1),
         ], p=0.2),
-        ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2),
-        OneOf([
-            OpticalDistortion(p=0.3),
-            GridDistortion(p=0.1),
-            IAAPiecewiseAffine(p=0.3),
+        albu.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2),
+        albu.OneOf([
+            albu.OpticalDistortion(p=0.3),
+            albu.GridDistortion(p=0.1),
+            albu.IAAPiecewiseAffine(p=0.3),
         ], p=0.2),
-        OneOf([
-            CLAHE(clip_limit=2),
-            IAASharpen(),
-            IAAEmboss(),
-            RandomContrast(),
-            RandomBrightness(),
-            RGBShift(r_shift_limit=10, g_shift_limit=10, b_shift_limit=10)
+        albu.OneOf([
+            albu.CLAHE(clip_limit=2),
+            albu.IAASharpen(),
+            albu.IAAEmboss(),
+            albu.RandomContrast(),
+            albu.RandomBrightness(),
+            albu.RGBShift(r_shift_limit=10, g_shift_limit=10, b_shift_limit=10)
         ], p=0.3),
-        HueSaturationValue(p=0.3),
+        albu.HueSaturationValue(p=0.3),
     ], p=p)
+
+
+def fixed_aug(p=0.5):
+    return albu.Compose([
+        albu.RandomRotate90(),
+        albu.Flip(),
+        albu.Transpose(),
+        albu.CoarseDropout(
+        min_holes=4,
+        max_holes=24,
+        p=0.2,
+    ),
+        albu.CoarseDropout(
+            min_holes=1,
+            max_holes=5,
+            max_height=70,
+            min_height=30,
+            max_width=70,
+            min_width=30,
+            p=0.2
+        ),
+    albu.OneOf([
+            albu.MotionBlur(p=0.2),
+            albu.MedianBlur(blur_limit=3, p=0.1),
+            albu.Blur(blur_limit=3, p=0.1),
+        ], p=0.2),
+        albu.OneOf([
+            albu.GaussNoise(),
+        ], p=0.2),
+        albu.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2),
+        albu.OneOf([
+            albu.OpticalDistortion(p=0.3),
+            albu.GridDistortion(p=0.1),
+        ], p=0.2),
+        albu.OneOf([
+            albu.RandomContrast(),
+            albu.RandomBrightness(),
+        ], p=0.3),
+    ], p=p)
+
 
 def strong_aug_dist(p=0.5):
     return Compose([

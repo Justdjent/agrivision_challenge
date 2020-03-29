@@ -604,6 +604,63 @@ def get_instance_unet(input_shape, class_names=args.class_names):
     return model
 
 
+def get_instance_unet_cloudhead(input_shape, class_names=args.class_names):
+    img_input = Input(input_shape)
+    conv1 = conv_block_simple(img_input, 32, "conv1_1")
+    conv1 = conv_block_simple(conv1, 32, "conv1_2")
+    pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
+
+    conv2 = conv_block_simple(pool1, 64, "conv2_1")
+    conv2 = conv_block_simple(conv2, 64, "conv2_2")
+    pool2 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool2")(conv2)
+
+    conv3 = conv_block_simple(pool2, 128, "conv3_1")
+    conv3 = conv_block_simple(conv3, 128, "conv3_2")
+    pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
+
+    conv4 = conv_block_simple(pool3, 256, "conv4_1")
+    conv4 = conv_block_simple(conv4, 256, "conv4_2")
+    conv4 = conv_block_simple(conv4, 256, "conv4_3")
+
+    # graddhead
+    up5 = concatenate([UpSampling2D()(conv4), conv3], axis=-1)
+    conv5 = conv_block_simple(up5, 128, "conv5_1")
+    conv5 = conv_block_simple(conv5, 128, "conv5_2")
+
+    up6 = concatenate([UpSampling2D()(conv5), conv2], axis=-1)
+    conv6 = conv_block_simple(up6, 64, "conv6_1")
+    conv6 = conv_block_simple(conv6, 64, "conv6_2")
+
+    up7 = concatenate([UpSampling2D()(conv6), conv1], axis=-1)
+    conv7 = conv_block_simple(up7, 32, "conv7_1")
+    conv7 = conv_block_simple(conv7, 32, "conv7_2")
+
+    conv7 = SpatialDropout2D(0.2)(conv7)
+    output_dict = {}
+    
+    #cloudhead
+    up5_cloud = concatenate([UpSampling2D()(conv4), conv3], axis=-1)
+    conv5_cloud = conv_block_simple(up5_cloud, 128, "conv5_1_cloud")
+    conv5_cloud = conv_block_simple(conv5_cloud, 128, "conv5_2_cloud")
+
+    up6_cloud = concatenate([UpSampling2D()(conv5_cloud), conv2], axis=-1)
+    conv6_cloud = conv_block_simple(up6_cloud, 64, "conv6_1_cloud")
+    conv6_cloud = conv_block_simple(conv6_cloud, 64, "conv6_2_cloud")
+
+    up7_cloud = concatenate([UpSampling2D()(conv6_cloud), conv1], axis=-1)
+    conv7_cloud = conv_block_simple(up7_cloud, 32, "conv7_1_cloud")
+    conv7_cloud = conv_block_simple(conv7_cloud, 32, "conv7_2_cloud")
+
+    conv7_cloud = SpatialDropout2D(0.2)(conv7_cloud)
+    output_dict["cloud_shadow"] = Conv2D(1, (1, 1), activation="sigmoid", name='cloud_shadow')(conv7_cloud)
+    for cls in class_names:
+        if cls=='cloud_shadow':
+            continue
+        output_dict[cls] = Conv2D(1, (1, 1), activation="sigmoid", name=cls)(conv7)
+    model = Model(img_input, output_dict)
+    return model
+
+
 def get_instance_unet_connect(input_shape):
     img_input = Input(input_shape)
     conv1 = conv_block_simple(img_input, 32, "conv1_1")
@@ -953,6 +1010,8 @@ def make_model(input_shape):
         return get_instance_unet(input_shape)
     elif network == 'instance_unet_connected':
         return get_instance_unet_connect(input_shape)
+    elif network == 'cloudhead':
+        return get_instance_unet_cloudhead(input_shape)
     elif network == 'instance_unet_3':
         return get_instance_unet_3(input_shape)
     elif network == 'instance_unet_dilated':
@@ -967,15 +1026,5 @@ def make_model(input_shape):
         return csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid")
     elif network == "csse_restnet_50_fpn_instance":
         return csse_resnet50_fpn_instance(input_shape, channels=1, activation="sigmoid")
-    elif network == "angle_net":
-        return get_angle_net(input_shape)
-    elif network == "dist_net":
-        return get_angle_net(input_shape, num_angles=61)
-    elif network == "dist_net_unet":
-        return get_anglenet_unet(input_shape, num_angles=61)
-    elif network == "dist_net_resnet":
-        return angle_net_csse_resnet50_fpn(input_shape, channels=61)
-    elif network == "row_lstm":
-        return get_traj_conv_lstm(input_shape, (15, 32, 32, 1))
     else:
         raise ValueError("Unknown network")

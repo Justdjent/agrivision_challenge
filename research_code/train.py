@@ -47,8 +47,15 @@ def main():
     num_classes = len(args.class_names)
     loss_list = [make_loss('bce_dice') for i in range(num_classes)]
     metrics_list = [dice_coef for i in range(num_classes)]
+    class_weights = {"weed_cluster":0.5,
+                     "standing_water":4.46,
+                     "double_plant":10.39,
+                     "waterway":5.82,
+                     "cloud_shadow":2.32,
+                     "planter_skip":10}
     model.compile(loss=loss_list,
                   optimizer=optimizer,
+                  loss_weights=class_weights,
                   metrics=metrics_list)
 
     crop_size = None
