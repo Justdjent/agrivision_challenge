@@ -1,14 +1,14 @@
 import os
-from time import clock
+import cv2
 
-import pandas as pd
 import numpy as np
-from keras.preprocessing.image import img_to_array
-from PIL import Image
-from tqdm import tqdm
+import pandas as pd
+import seaborn as sn
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
-from params import args
+from tqdm import tqdm
+from research_code.params import args
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
@@ -19,11 +19,50 @@ def dice_coef(y_true, y_pred, smooth=1.0):
     intersection = np.sum(y_true_f * y_pred_f)
     return (2. * intersection + smooth) / (np.sum(y_true_f) + np.sum(y_pred_f) + smooth)
 
+
 def iou(y_true, y_pred, smooth=1.0):
     y_true_f = y_true.flatten()
     y_pred_f = y_pred.flatten()
     intersection = np.sum(y_true_f * y_pred_f)
     return (2. * intersection + smooth) / (np.sum(y_true_f) + np.sum(y_pred_f) + smooth)
+
+
+def m_iou(confusion_matrix: np.ndarray, class_names):
+    class_ious = {}
+    overall_iou = 0
+    for cls, cls_name in enumerate(class_names):
+        intersection = confusion_matrix[cls, cls]
+        prediction = confusion_matrix[cls, :].sum()
+        target = confusion_matrix[:, cls].sum()
+        union = prediction + target - intersection
+        if union == 0:
+            class_ious[cls_name] = np.NAN
+        else:
+            class_iou = round(intersection / union, 3)
+            class_ious[cls_name] = class_iou
+            overall_iou += class_iou
+    return round(overall_iou / len(class_names), 3), class_ious
+
+
+def compute_confusion_matrix(predictions: np.ndarray, ground_truths: np.ndarray, num_classes):
+    # pick prediction with the highest score and convert it into 3d binary array
+    highest_score_prediction = predictions.argmax(axis=-1)
+    predictions_mask = tf.one_hot(highest_score_prediction, num_classes, dtype=np.uint8).numpy()
+    ground_truths = ground_truths.astype(np.uint8)
+    true_positive = (predictions_mask * ground_truths).sum(axis=2)
+    highest_score_prediction = predictions.argmax(axis=-1)
+    incorrect_predictions = true_positive == 0
+    correct_predictions = true_positive == 1
+    transposed_conf_matrix = np.zeros((num_classes, num_classes), dtype=np.int32)
+    confusion_matrix_tp = ground_truths[correct_predictions].sum(axis=0)
+    for cls in range(num_classes):
+        transposed_conf_matrix[cls, :] += ground_truths[incorrect_predictions & (highest_score_prediction == cls)].sum(
+            axis=0, dtype=np.int32)
+    confusion_matrix = transposed_conf_matrix.T
+    np.fill_diagonal(confusion_matrix, confusion_matrix_tp)
+    assert confusion_matrix.sum() == ground_truths.sum()
+    return confusion_matrix.astype(np.uint64)
+
 
 def calculate_metrics(base_mask, transformed_mask, eta=0.0000001):
     """
@@ -42,102 +81,97 @@ def calculate_metrics(base_mask, transformed_mask, eta=0.0000001):
     dice = 2 * inter / (2 * inter + fp + fn + eta)
     return iou, dice
 
-def evaluate(masks_dir, results_dir, tfr_df_name, r_type='nrg'):
+
+def plot_confusion_matrix(confusion_matrix, class_names, x_title, pred_dir):
+    confusion_matrix = confusion_matrix.astype('float') / confusion_matrix.sum(axis=1)[:, np.newaxis]
+    df_cm = pd.DataFrame(confusion_matrix, index=class_names,
+                         columns=class_names)
+    plt.figure(figsize=(15, 15))
+    heat_map = sn.heatmap(df_cm, annot=True)
+    heat_map.set_ylabel("Ground truth")
+    heat_map.set_xlabel(x_title)
+    plt.show()
+    heat_map.figure.savefig(os.path.join(pred_dir, "conf_matrix.png"))
+
+
+def evaluate(test_dir, prediction_dir, output_csv, test_df_path, threshold, class_names):
     """
     Creates dataframe and tfrecords file for results visualization
-    :param masks_dir: Ground truth masks dir
-    :param results_dir: Predicted masks dir
-    :param tfr_df_name: Name of output DataFrame and TFRecords, Will be saved to results_dir/<name>
-    :param r_type: raster type, rgg or nrg
+    :param test_dir: Directory with images, boundaries, masks and ground truth of the test
+    :param prediction_dir: Predicted masks dir
+    :param output_csv: Name for output_csv
+    :param test_df_path: Path to dataframe with data about test
+    :param threshold: Threshold for predictions
+    :param class_names: Array of class names
+    :param background_is_class: Name of activation function - currently supported 'sigmoid' and 'softmax'
     :return:
     """
-    test_df = pd.read_csv(args.test_df)
-    thresh = args.threshold
-    batch_size = 1
-    nbr_test_samples = len(test_df)
-    df = pd.DataFrame(columns=['name', 'score', 'img_width', 'img_height'])
-    # img_sizes = []
-    dices = []
-    ious = []
-    writer = tf.python_io.TFRecordWriter(os.path.join(os.path.dirname(results_dir), tfr_df_name.replace('.csv', '.tfrecords')))
-    for i in tqdm(range(int(nbr_test_samples / batch_size))):
-        masks = []
-        results = []
-        mask_filename = None
-        img_size = None
-        for j in range(batch_size):
-            if i * batch_size + j < len(test_df):
-                row = test_df.iloc[i * batch_size + j]
-                mask_filename = row['name']
-                mask_path = os.path.join(masks_dir, row['folder'], 'nrg_masks', row['name'].replace(".JPG", ".png").replace(".jpg", ".png"))
-                if 'src_name' in row.index.tolist():
-                    img_path = os.path.join(args.test_data_dir, row['folder'], r_type, row['src_name'])
-                else:
-                    img_path = os.path.join(masks_dir, row['folder'], r_type, row['name'].replace('nrg', r_type).replace('png', 'jpg'))
-                result_path = os.path.join(results_dir, row['name'].replace('nrg', 'nrg').replace('jpg', 'png'))
-                mask = Image.open(mask_path)
-                image = Image.open(img_path)
-                result = Image.open(result_path)
-                img_size = mask.size
-                masks.append(img_to_array(mask) > 128)
-                results.append(img_to_array(result) > 128)
+    test_df = pd.read_csv(test_df_path)
+    test_df = test_df[test_df['ds_part'] == 'val']
+    if 'background' in class_names:
+        df = pd.DataFrame(columns=class_names + ['name'])
+        num_classes = len(class_names)
+    else:
+        df = pd.DataFrame(columns=class_names + ['background', 'name'])
+        num_classes = len(class_names) + 1
+    confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.uint64)
+    for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
+        filename = row['name']
+        boundary_path = os.path.join(test_dir, "boundaries", filename.replace('.jpg', '.png'))
+        boundary = cv2.imread(boundary_path, cv2.IMREAD_GRAYSCALE).astype(bool)
+        mask_path = os.path.join(test_dir, "masks", filename.replace('.jpg', '.png'))
+        if os.path.exists(mask_path):
+            invalid_pixels_mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE).astype(bool)
+        else:
+            invalid_pixels_mask = np.ones(boundary.shape)
+        valid_pixels_mask = np.logical_and(boundary, invalid_pixels_mask).astype(np.uint8)
+        # since there is no background class at the moment it should be calculated based on other classes
+        if 'background' not in class_names:
+            background_prediction = np.zeros(boundary.shape)
+            background_ground_truth = np.zeros(boundary.shape)
+        ground_truths = []
+        predictions = []
+        for class_idx, class_name in enumerate(class_names):
+            ground_truth_path = os.path.join(test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
+            prediction_path = os.path.join(prediction_dir, class_name, filename)
+            ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
+            prediction = cv2.imread(prediction_path, cv2.IMREAD_GRAYSCALE)
+            ground_truth = (ground_truth / 255)
+            prediction = (prediction / 255)
+            if 'background' not in class_names:
+                prediction[prediction < threshold] = 0
+                background_prediction = np.logical_or(background_prediction, prediction)
+                background_ground_truth = np.logical_or(background_ground_truth, ground_truth)
+            ground_truths.append(ground_truth)
+            predictions.append(prediction)
+        if 'background' not in class_names:
+            background_ground_truth = np.logical_not(background_ground_truth)
+            background_prediction = np.logical_not(background_prediction)
+            ground_truths.append(background_ground_truth)
+            predictions.append(background_prediction)
+        predictions = np.moveaxis(np.array(predictions) * valid_pixels_mask, 0, -1)
+        ground_truths = np.moveaxis(np.array(ground_truths) * valid_pixels_mask, 0, -1)
+        img_confusion_matrix = compute_confusion_matrix(predictions, ground_truths, num_classes)
+        confusion_matrix += img_confusion_matrix
+        if 'background' not in class_names:
+            _, img_ious = m_iou(img_confusion_matrix, class_names + ['background'])
+        else:
+            _, img_ious = m_iou(img_confusion_matrix, class_names)
+        img_ious["name"] = filename
+        df = df.append(img_ious, ignore_index=True)
+    if 'background' not in class_names:
+        class_names.append('background')
+    mean_iou, class_ious = m_iou(confusion_matrix, class_names)
+    x_title = f"Mean IoU - {mean_iou}\n{class_ious}"
+    print(x_title)
+    plot_confusion_matrix(confusion_matrix, class_names, x_title, prediction_dir)
+    df.to_csv(os.path.join(prediction_dir, output_csv), index=False)
 
-        masks = np.array(masks)
-        results = np.array(results)
-        try:
-            batch_dice = dice_coef(masks, results)
-            batch_iou = iou(masks, results)
-        except:
-            print('h')
-            continue
-        dices.append(batch_dice)
-        ious.append(batch_iou)
-        df.loc[i] = [mask_filename, batch_dice, img_size[0], img_size[1]]
 
-        # if row['name'].split('/')[-1].split('_')[1] == 'nrg':
-        #     grove = row['name'].split('/')[-1].split('_')[0]
-        # else:
-        #     grove = row['name'].split('/')[-1].split('_')[0] + '_' + row['name'].split('/')[-1].split('_')[1]
-        grove = row['grove']
-        # if row['name'].split('/')[-1].split('_')[1] == 'nrg':
-        #     grove = row['name'].split('/')[-1].split('_')[0]
-        # else:
-        #     grove = row['name'].split('/')[-1].split('_')[0] + '_' + row['name'].split('/')[-1].split('_')[1]
-        img_raw = image.tobytes()
-        msk_raw = mask.tobytes()
-        rst_raw = result.tobytes()
-        example = tf.train.Example(features=tf.train.Features(feature={
-            "img_height": tf.train.Feature(int64_list=tf.train.Int64List(value=[int(img_size[1])])),
-            "img_width": tf.train.Feature(int64_list=tf.train.Int64List(value=[int(img_size[0])])),
-            "dice_score": tf.train.Feature(float_list=tf.train.FloatList(value=[batch_dice])),
-            "grove": tf.train.Feature(bytes_list=tf.train.BytesList(value=[tf.compat.as_bytes(grove)])),
-            "img_raw": tf.train.Feature(bytes_list=tf.train.BytesList(value=[img_raw])),
-            "mask_raw": tf.train.Feature(bytes_list=tf.train.BytesList(value=[msk_raw])),
-            "result_raw": tf.train.Feature(bytes_list=tf.train.BytesList(value=[rst_raw])),
-            "img_name": tf.train.Feature(
-                bytes_list=tf.train.BytesList(value=[tf.compat.as_bytes(img_path.split('/')[-1])])),
-            "msk_name": tf.train.Feature(
-                bytes_list=tf.train.BytesList(value=[tf.compat.as_bytes(mask_path.split('/')[-1])])),
-            "rst_name": tf.train.Feature(
-                bytes_list=tf.train.BytesList(value=[tf.compat.as_bytes(result_path.split('/')[-1])])),
-        }))
-        writer.write(example.SerializeToString())
-
-    print(np.mean(dices))
-    writer.close()
-    df.to_csv(os.path.join(os.path.dirname(results_dir), tfr_df_name), index=False)
-    
 if __name__ == '__main__':
-    prediction_dir = args.pred_mask_dir
-    mask_dir = args.test_mask_dir
-    output_csv_name = args.output_csv
-    evaluate(mask_dir,
-             prediction_dir,
-             output_csv_name,
-             args.r_type)
-    # evaluate('/media/user/5674E720138ECEDF/geo_data/manual_labelling/images_for_labeling',
-    #          '/home/user/projects/geo/dl/unet/data/test_weights/output_rgg_cleaned_20_09',
-    #          'df_tr_rgg_cleaned_20_09.csv')
-    # evaluate('/home/user/projects/geo/geoslicer/output',
-    #          '/home/user/projects/geo/dl/unet/data/test_weights/output_brazil',
-    #          'df_tr_full_brazil.csv')
+    evaluate(test_dir=args.test_data_dir,
+             prediction_dir=args.pred_mask_dir,
+             output_csv=args.output_csv,
+             test_df_path=args.test_df,
+             threshold=args.threshold,
+             class_names=args.class_names)
