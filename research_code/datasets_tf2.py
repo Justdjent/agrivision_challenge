@@ -254,10 +254,10 @@ class DataGenerator_angles(tf.keras.utils.Sequence):
 
     def read_masks_borders(self, name):
         border_path = os.path.join(self.img_dir, 'boundaries', name.replace(".jpg", ".png"))
-        border_img = cv2.imread(border_path)
+        border_img = cv2.imread(border_path, cv2.IMREAD_GRAYSCALE)
         mask_path = os.path.join(self.img_dir, 'masks', name.replace(".jpg", ".png"))
         if os.path.exists(mask_path):
-            mask_img = cv2.imread(mask_path)
+            mask_img = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
         else:
             mask_img = np.ones(border_img.shape)
         
@@ -277,12 +277,20 @@ class DataGenerator_angles(tf.keras.utils.Sequence):
         for ind, filename in train_batch.iterrows():
             img_path = os.path.join(
                 self.img_dir, 'images', "rgb", filename['name'])
+            nir_img_path = os.path.join(
+                self.img_dir, 'images', "nir", filename['name'])
             img = cv2.imread(img_path)
+            nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
+            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+            lab = lab[:, :, 0]
+            lab = np.expand_dims(lab, axis=-1)
+            nir_img = np.expand_dims(nir_img, axis=-1)
             try:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             except Exception as error:
                 print(img_path)
                 print(error)
+            img = np.concatenate([img, lab, nir_img], axis=-1)
             not_valid_mask = self.read_masks_borders(filename['name'])
             img[not_valid_mask] = 0
             img = cv2.resize(img, self.out_size)

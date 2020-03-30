@@ -29,7 +29,7 @@ def main():
                                                     args.fold, args.input_width,
                                                     args.learning_rate, args.r_type) +\
         '-{epoch:d}-{val_loss:0.7f}.h5'
-    ch = 3
+    ch = 5
     # model = make_model((args.input_width, args.input_height, args.stacked_channels + ch))
     model = make_model((None, None, args.stacked_channels + ch))
     freeze_model(model, args.freeze_till_layer)
