@@ -1,5 +1,6 @@
 import os
 import cv2
+import json
 
 import numpy as np
 import pandas as pd
@@ -82,7 +83,7 @@ def calculate_metrics(base_mask, transformed_mask, eta=0.0000001):
     return iou, dice
 
 
-def plot_confusion_matrix(confusion_matrix, class_names, x_title, pred_dir):
+def plot_confusion_matrix(confusion_matrix, class_names, x_title, pred_dir, output_filename):
     confusion_matrix = confusion_matrix.astype('float') / confusion_matrix.sum(axis=1)[:, np.newaxis]
     df_cm = pd.DataFrame(confusion_matrix, index=class_names,
                          columns=class_names)
@@ -91,7 +92,7 @@ def plot_confusion_matrix(confusion_matrix, class_names, x_title, pred_dir):
     heat_map.set_ylabel("Ground truth")
     heat_map.set_xlabel(x_title)
     plt.show()
-    heat_map.figure.savefig(os.path.join(pred_dir, "conf_matrix.png"))
+    heat_map.figure.savefig(os.path.join(pred_dir, f"{output_filename}_conf_matrix.png"))
 
 
 def evaluate(test_dir, prediction_dir, output_csv, test_df_path, threshold, class_names):
@@ -163,8 +164,12 @@ def evaluate(test_dir, prediction_dir, output_csv, test_df_path, threshold, clas
         class_names.append('background')
     mean_iou, class_ious = m_iou(confusion_matrix, class_names)
     x_title = f"Mean IoU - {mean_iou}\n{class_ious}"
+    class_ious["mean_iou"] = mean_iou
     print(x_title)
-    plot_confusion_matrix(confusion_matrix, class_names, x_title, prediction_dir)
+    output_filename = output_csv.split('.')[0]
+    plot_confusion_matrix(confusion_matrix, class_names, x_title, prediction_dir, output_filename)
+    with open(os.path.join(prediction_dir, f"{output_filename}_mean_ious.json"), 'w') as f:
+        json.dump(class_ious, f)
     df.to_csv(os.path.join(prediction_dir, output_csv), index=False)
 
 
