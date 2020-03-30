@@ -1,5 +1,5 @@
 affine==2.2.0
-albumentations=0.4.5
+albumentations==0.4.5
 attrs==17.4.0 
 certifi==2018.1.18 
 chardet==3.0.4 
