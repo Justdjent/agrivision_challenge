@@ -3,6 +3,7 @@ import cv2
 
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 
 from tqdm import tqdm
 from research_code.params import args
@@ -11,11 +12,20 @@ from research_code.random_transform_mask import pad_size
 from keras.applications import imagenet_utils
 from tensorflow.image import flip_left_right
 
-tqdm.monitor_interval = 0
 
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-prediction_dir = args.pred_mask_dir
-
+def setup_env():
+    tqdm.monitor_interval = 0
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+                logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
 
 def do_tta(x, tta_type):
     if tta_type == 'hflip':
@@ -44,8 +54,8 @@ def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, 
     model = make_model((None, None, 3 + stacked_channels))
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
+    test_df = test_df[test_df['ds_part'] == 'val']
     nbr_test_samples = len(test_df)
-
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
         img_path = os.path.join(test_data_dir, 'images', "rgb", row['name'])
         img = cv2.imread(img_path)
@@ -66,6 +76,7 @@ def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, 
 
 
 if __name__ == '__main__':
+    setup_env()
     predict(output_dir=args.pred_mask_dir,
             class_names=args.class_names,
             weights_path=args.weights,
