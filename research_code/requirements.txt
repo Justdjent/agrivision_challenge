@@ -1,4 +1,5 @@
 affine==2.2.0
+albumentations=0.4.5
 attrs==17.4.0 
 certifi==2018.1.18 
 chardet==3.0.4 
@@ -23,6 +24,7 @@ rasterio==1.0.24
 requests==2.18.4
 scikit-image==0.13.1
 scikit-learn==0.19.1
+seaborn==0.10.0
 Shapely==1.6.4.post1
 six==1.11.0
 scipy==1.1.0
