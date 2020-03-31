@@ -26,7 +26,7 @@ arg('--manual_dataset_dir', default='/mnt/storage_4tb/ymi/datasets/Agriculture-V
 arg('--test_data_dir', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_val')
 arg('--test_mask_dir', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_val')
 
-arg('--class_names', default=['cloud_shadow', 'double_plant', 'planter_skip', 'standing_water', 'waterway', 'weed_cluster'])
+arg('--class_names', type=str, nargs='+', default=['cloud_shadow', 'double_plant', 'planter_skip', 'standing_water', 'waterway', 'weed_cluster'])
 arg('--models_dir', default='models')
 arg('--weights')
 arg('--loss_function', default='crossentropy_time')
@@ -68,4 +68,6 @@ arg('--ensembling_cpu_threads', type=int, default=6)
 arg('--output_csv')
 arg('--exp_name')
 arg('--coord_conv', type=bool, default=False)
+
+arg('--use_aug', action='store_true')
 args = parser.parse_args()
