@@ -1,33 +1,49 @@
 import os
-os.environ['LD_LIBRARY_PATH'] = '/usr/local/cuda-10.0/extras/CUPTI/lib64'
+
 import pandas as pd
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
 
 # from CyclicLearningRate import CyclicLR
-from research_code.datasets_tf2 import DataGenerator_angles #build_batch_generator, generate_filenames, build_batch_generator_angle
+from research_code.datasets_tf2 import \
+    DataGenerator_angles  # build_batch_generator, generate_filenames, build_batch_generator_angle
 from research_code.losses import make_loss, dice_coef_clipped, dice_coef, dice_coef_border, mse_masked, angle_rmse
 from research_code.models import make_model
 from research_code.params import args
 from research_code.utils import freeze_model, ThreadsafeIter
 
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-
 import tensorflow as tf
 from keras.backend.tensorflow_backend import set_session
 
 
+def setup_env():
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+                logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
+
+
 def main():
-    man_dir = args.manual_dataset_dir
+    setup_env()
+    train_dir = args.manual_dataset_dir
+    val_dir = args.test_data_dir
 
     if args.net_alias is not None:
         formatted_net_alias = '-{}-'.format(args.net_alias)
 
-    best_model_file =\
-        '{}/{}{}loss-{}-fold_{}-{}{:.6f}-{}'.format(args.models_dir, args.network,
-                                                    formatted_net_alias, args.loss_function,
-                                                    args.fold, args.input_width,
-                                                    args.learning_rate, args.r_type) +\
+    os.makedirs("{}/{}".format(args.models_dir, args.exp_name), exist_ok=True)
+    best_model_file = \
+        '{}/{}/{}{}loss-{}-fold_{}-{}{:.6f}-{}'.format(args.models_dir, args.exp_name, args.network,
+                                                       formatted_net_alias, args.loss_function,
+                                                       args.fold, args.input_width,
+                                                       args.learning_rate, args.r_type) + \
         '-{epoch:d}-{val_loss:0.7f}.h5'
     ch = 3
     # model = make_model((args.input_width, args.input_height, args.stacked_channels + ch))
@@ -59,27 +75,29 @@ def main():
     else:
         print('Using full size images, --use_crop=True to do crops')
 
-    train_df = pd.read_csv(args.train_df)
-    val_df = pd.read_csv(args.val_df)
+    df = pd.read_csv(args.train_df)
+    df = df[df[args.class_names[0]] != 0]
+    train_df = df[df['ds_part'] == 'train']
+    val_df = df[df['ds_part'] == 'val']
 
     print('Training fold #{}, {} in train_ids, {} in val_ids'.format(args.fold, len(train_df), len(val_df)))
 
     train_generator = DataGenerator_angles(
         train_df,
         classes=args.class_names,
-        img_dir=man_dir,
+        img_dir=train_dir,
         batch_size=args.batch_size,
         shuffle=True,
         out_size=(args.out_height, args.out_width),
         crop_size=crop_size,
         # mask_dir=mask_dir,
-        aug=False
+        aug=args.use_aug
     )
 
     val_generator = DataGenerator_angles(
         val_df,
         classes=args.class_names,
-        img_dir=man_dir,
+        img_dir=val_dir,
         batch_size=args.batch_size,
         shuffle=True,
         out_size=(args.out_height, args.out_width),
@@ -89,16 +107,18 @@ def main():
     )
 
     best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
-                                                  verbose=1,
-                                                  save_best_only=True,
-                                                  save_weights_only=True,
-                                                  mode='min')
-
+                                 verbose=1,
+                                 save_best_only=True,
+                                 save_weights_only=True,
+                                 mode='min')
+    log_dir = os.path.join('./logs', args.exp_name)
+    os.makedirs(log_dir, exist_ok=False)
     callbacks = [best_model,
-                 EarlyStopping(patience=45, verbose=10),
-                 TensorBoard(log_dir=os.path.join('./logs', args.exp_name), histogram_freq=0, write_graph=True, write_images=True)]
-                 # ReduceLROnPlateau(monitor='val_dice_coef', mode='max', factor=0.2, patience=5, min_lr=0.00001,
-                 #                  verbose=1)]
+                 EarlyStopping(patience=10, verbose=10),
+                 TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True,
+                             write_images=True)]
+    # ReduceLROnPlateau(monitor='val_dice_coef', mode='max', factor=0.2, patience=5, min_lr=0.00001,
+    #                  verbose=1)]
     if args.clr is not None:
         clr_params = args.clr.split(',')
         base_lr = float(clr_params[0])
