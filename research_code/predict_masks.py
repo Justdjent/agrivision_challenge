@@ -54,7 +54,8 @@ def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, 
     model = make_model((None, None, 3 + stacked_channels))
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
-    test_df = test_df[test_df['ds_part'] == 'val']
+    class_name = class_names[0]
+    test_df = test_df[(test_df['ds_part'] == 'val')]
     nbr_test_samples = len(test_df)
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
         img_path = os.path.join(test_data_dir, 'images', "rgb", row['name'])
@@ -66,10 +67,9 @@ def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, 
         preds = model.predict(x)
 
         for num, pred in enumerate(preds):
-            bin_mask = (pred[0, :, :, 0] * 255).astype(np.uint8)
-            cur_class = class_names[num]
+            bin_mask = (pred * 255).astype(np.uint8)
             filename = row['name']
-            save_folder_masks = os.path.join(output_dir, cur_class)
+            save_folder_masks = os.path.join(output_dir, class_name)
             os.makedirs(save_folder_masks, exist_ok=True)
             save_path_masks = os.path.join(save_folder_masks, filename)
             cv2.imwrite(save_path_masks, bin_mask)
