@@ -292,6 +292,7 @@ class DataGenerator_angles(tf.keras.utils.Sequence):
                 mask_path = os.path.join(self.img_dir, 'labels', cls, filename['name'])
                 mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
                 mask = mask > 0
+                mask = mask[not_valid_mask[:,:,0]]
                 # print(mask.shape)
                 class_labels[cls].append(mask)
 
