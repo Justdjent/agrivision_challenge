@@ -3,8 +3,7 @@ import os
 
 import keras.backend as K
 import numpy as np
-#from keras.preprocessing.image import transform_matrix_offset_center, apply_transform, random_channel_shift, flip_axis, \
-from keras.preprocessing.image import    load_img, img_to_array
+from keras.preprocessing.image import load_img, img_to_array
 from albumentations import (
     HorizontalFlip, IAAPerspective, ShiftScaleRotate, CLAHE, RandomRotate90,
     Transpose, ShiftScaleRotate, Blur, OpticalDistortion, GridDistortion, HueSaturationValue,
@@ -12,6 +11,8 @@ from albumentations import (
     IAASharpen, IAAEmboss, RandomContrast, RandomBrightness, Flip, OneOf, Compose, RGBShift, Rotate, Resize
 )
 import cv2
+import albumentations as albu
+
 
 class ImageWithMaskFunction:
     def __init__(self, out_size, mask_dir, mask_suffix=".png", crop_size=None):
@@ -29,7 +30,6 @@ class ImageWithMaskFunction:
         line_gap_mask = mask * np.bitwise_not(bin_mask)
         return line_tree_mask, line_gap_mask, mask
 
-
     def mask_pred(self, batch_x, filenames, img_auto_dir, aug=False):
         mask_pred = np.zeros((len(batch_x), self.out_size[0], self.out_size[1], 1), dtype=K.floatx())
         mask_pred[:, :, :, :] = 0.
@@ -45,7 +45,7 @@ class ImageWithMaskFunction:
             # mask_img = load_img(mask, grayscale=True, target_size=(self.out_size[0], self.out_size[1]))
             try:
                 mask_img = img_to_array(load_img(mask, grayscale=True).resize(self.out_size))
-                #edge_img = img_to_array(load_img(edge, grayscale=True).resize(self.out_size))
+                # edge_img = img_to_array(load_img(edge, grayscale=True).resize(self.out_size))
                 if os.path.exists(bin_mask):
                     bin_mask_img = img_to_array(load_img(bin_mask, grayscale=True).resize(self.out_size))
                 else:
@@ -68,8 +68,8 @@ class ImageWithMaskFunction:
             # angle_pred[i, :, :, :] = (mask_img > 1) & (200 > mask_img)
             # border_pred[i, :, :, :] = mask_img < 200
             # border_pred[i, :, :, :] = mask_img * (np.pi / 180)
-            #edge_img[mask_img > 0] = 0
-            #angle_pred[i, :, :, :] = edge_img > 0
+            # edge_img[mask_img > 0] = 0
+            # angle_pred[i, :, :, :] = edge_img > 0
             #
             if aug:
                 data = {"image": batch_x[i, :, :, :].astype(np.uint8),
@@ -78,16 +78,17 @@ class ImageWithMaskFunction:
                         'border': border_pred[i, :, :, :].astype(np.float32)}
                 augmented = augmentation(**data)
                 try:
-                    batch_x[i, :, :, :], mask_pred[i, :, :, :], angle_pred[i, :, :, :], border_pred[i, :, :, :] = augmented["image"],\
-                                                                 augmented['mask'].reshape((augmented['mask'].shape[0],
-                                                                                                                augmented['mask'].shape[1],
-                                                                                                                1)),\
-                                                                 augmented['angle'].reshape((augmented['angle'].shape[0],
-                                                                                           augmented['angle'].shape[1],
-                                                                                           1)),\
-                                                                    augmented['border'].reshape((augmented['border'].shape[0],
-                                                                                                augmented['border'].shape[1],
-                                                                                                1))
+                    batch_x[i, :, :, :], mask_pred[i, :, :, :], angle_pred[i, :, :, :], border_pred[i, :, :, :] = \
+                    augmented["image"], \
+                    augmented['mask'].reshape((augmented['mask'].shape[0],
+                                               augmented['mask'].shape[1],
+                                               1)), \
+                    augmented['angle'].reshape((augmented['angle'].shape[0],
+                                                augmented['angle'].shape[1],
+                                                1)), \
+                    augmented['border'].reshape((augmented['border'].shape[0],
+                                                 augmented['border'].shape[1],
+                                                 1))
                 except:
                     print('hi')
 
@@ -111,7 +112,8 @@ class ImageWithMaskFunction:
             return batch_x, mask_pred
 
     def mask_pred_angles(self, batch_x, masks_x, classes, aug=False):
-        augmentation = strong_aug(p=0.6)
+        # augmentation = strong_aug(p=0.6)
+        augmentation = aug_with_coarse_dropout()
         for i in range(len(batch_x)):
             if aug:
                 data = {"image": batch_x[i, :, :, :].astype(np.uint8)}
@@ -144,7 +146,6 @@ class ImageWithMaskFunction:
         else:
             return batch_x, masks_x
 
-
     def mask_pred_train(self, batch_x, filenames, index_array, l):
         return self.mask_pred(batch_x, filenames, index_array, True)
 
@@ -154,7 +155,7 @@ class ImageWithMaskFunction:
 
 def get_window(mask, attitude=120, window_meters=30, focal=35.4):
     # camera params
-    #focal = 35.4
+    # focal = 35.4
     width = mask.shape[0]
     height = mask.shape[1]
     sensor_width = 35.9
@@ -162,15 +163,15 @@ def get_window(mask, attitude=120, window_meters=30, focal=35.4):
 
     # calcluate field of view in meters (base image atitude used, because We will scale target image to base and translate it
     fov = sensor_width * attitude / focal
-    #print(fov)
+    # print(fov)
 
     # calcluate number of pixels in 1 meter
     pix_in_meter = width / fov
-    #print(pix_in_meter)
+    # print(pix_in_meter)
 
     # transform the difference from meters to pixels
     x_dif_pix = meters * pix_in_meter
-#     y_dif_pix = meters * pix_in_meter
+    #     y_dif_pix = meters * pix_in_meter
     return int(x_dif_pix)
 
 
@@ -214,10 +215,12 @@ def pad_img(img, mask, shape):
             padded_img = np.zeros((img.shape[0] + 2 * pad_shape[0],
                                    img.shape[1] + 2 * pad_shape[1], 3), dtype=np.uint8)
             for i in range(3):
-                padded_img[:, :, i] = np.pad(img[:, :, i], ((pad_shape[0],pad_shape[0]), (pad_shape[1],pad_shape[1])), 'reflect')
+                padded_img[:, :, i] = np.pad(img[:, :, i], ((pad_shape[0], pad_shape[0]), (pad_shape[1], pad_shape[1])),
+                                             'reflect')
             padded_img = padded_img[:shape[0], :shape[1], :]
     # print(paded_mask.shape, paded_img.shape)
     return padded_img, padded_mask
+
 
 def pad_size(img, pad_size=32):
     """
@@ -253,7 +256,8 @@ def pad_size(img, pad_size=32):
 
     return img, (x_min_pad, y_min_pad, x_max_pad, y_max_pad)
 
-def pad(img, shape):#pad_size=32):
+
+def pad(img, shape):  # pad_size=32):
     """
     Load image from a given path and pad it on the sides, so that eash side is divisible by 32 (network requirement)
     if pad = True:
@@ -299,6 +303,7 @@ def unpad(img, pads):
 
     return img[y_min_pad:height - y_max_pad, x_min_pad:width - x_max_pad]
 
+
 # height_shift_range=0.2,
 # width_shift_range=0.2,
 # shear_range=0.0,
@@ -307,6 +312,46 @@ def unpad(img, pads):
 # channel_shift_range=0.1,
 # horizontal_flip=True,
 # vertical_flip=True)
+def aug_with_coarse_dropout():
+    return albu.Compose([
+        # Pixel level
+        albu.RandomRotate90(),
+        albu.Flip(),
+        albu.Transpose(),
+        albu.CoarseDropout(
+            min_holes=4,
+            max_holes=24,
+            p=0.2,
+        ),
+        albu.CoarseDropout(
+            min_holes=1,
+            max_holes=5,
+            max_height=70,
+            min_height=30,
+            max_width=70,
+            min_width=30,
+            p=0.2
+        ),
+        albu.OneOf([
+            albu.MotionBlur(p=0.2),
+            albu.MedianBlur(blur_limit=3, p=0.1),
+            albu.Blur(blur_limit=3, p=0.1),
+        ], p=0.2),
+        albu.OneOf([
+            albu.GaussNoise(),
+        ], p=0.2),
+        albu.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2),
+        albu.OneOf([
+            albu.OpticalDistortion(p=0.3),
+            albu.GridDistortion(p=0.1),
+        ], p=0.2),
+        albu.OneOf([
+            albu.RandomBrightnessContrast()
+        ], p=0.3),
+    ],
+        p=0.5)
+
+
 def strong_aug(p=0.5):
     return Compose([
         RandomRotate90(),
@@ -337,6 +382,7 @@ def strong_aug(p=0.5):
         ], p=0.3),
         HueSaturationValue(p=0.3),
     ], p=p)
+
 
 def strong_aug_dist(p=0.5):
     return Compose([
@@ -374,8 +420,8 @@ def tiles_with_overlap(img, window_size, overlap):
     sp = []
     matrices = []
     pnt_step = int(window_size * overlap)
-    step_h = img.shape[1]//pnt_step
-    step_w = img.shape[0]//pnt_step
+    step_h = img.shape[1] // pnt_step
+    step_w = img.shape[0] // pnt_step
     # print(step_h, step_w)
     pointerh_min = 0
     for h in range(step_h + 1):
@@ -386,8 +432,8 @@ def tiles_with_overlap(img, window_size, overlap):
         pointerh_max = min(pointerh_min + window_size, img.shape[1])
         pointerw_min = 0
         if pointerh == pointerh_max:
-                #print("hi")
-                continue
+            # print("hi")
+            continue
         for w in range(step_w + 1):
             if w != 0:
                 pointerw_min += pnt_step
@@ -395,7 +441,7 @@ def tiles_with_overlap(img, window_size, overlap):
             pointerw_max = pointerw_min + window_size
             pointerw_max = min(pointerw_min + window_size, img.shape[0])
             if pointerw == pointerw_max:
-                #print("hi")
+                # print("hi")
                 continue
             else:
                 # print((pointerh, pointerh_max), (pointerw, pointerw_max))
