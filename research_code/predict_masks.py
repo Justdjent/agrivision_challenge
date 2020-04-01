@@ -55,24 +55,25 @@ def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, 
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
     class_name = class_names[0]
-    test_df = test_df[(test_df['ds_part'] == 'val')]
-    nbr_test_samples = len(test_df)
-    for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
-        img_path = os.path.join(test_data_dir, 'images', "rgb", row['name'])
-        img = cv2.imread(img_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img, pads = pad_size(img)
-        x = np.expand_dims(img, axis=0)
-        x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
-        preds = model.predict(x)
+    for ds_part in ['train', 'val']:
+        input_df = test_df[(test_df['ds_part'] == ds_part) & (test_df[class_name] != 0)]
+        nbr_test_samples = len(input_df)
+        for idx, row in tqdm(input_df.iterrows(), total=nbr_test_samples):
+            img_path = os.path.join(test_data_dir, 'images', "rgb", row['name'])
+            img = cv2.imread(img_path)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img, pads = pad_size(img)
+            x = np.expand_dims(img, axis=0)
+            x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
+            preds = model.predict(x)
 
-        for num, pred in enumerate(preds):
-            bin_mask = (pred * 255).astype(np.uint8)
-            filename = row['name']
-            save_folder_masks = os.path.join(output_dir, class_name)
-            os.makedirs(save_folder_masks, exist_ok=True)
-            save_path_masks = os.path.join(save_folder_masks, filename)
-            cv2.imwrite(save_path_masks, bin_mask)
+            for num, pred in enumerate(preds):
+                bin_mask = (pred * 255).astype(np.uint8)
+                filename = row['name']
+                save_folder_masks = os.path.join(output_dir, class_name)
+                os.makedirs(save_folder_masks, exist_ok=True)
+                save_path_masks = os.path.join(save_folder_masks, filename)
+                cv2.imwrite(save_path_masks, bin_mask)
 
 
 if __name__ == '__main__':
