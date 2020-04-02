@@ -1,5 +1,6 @@
 import os
 import cv2
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,7 @@ def setup_env():
             # Memory growth must be set before GPUs have been initialized
             print(e)
 
+
 def do_tta(x, tta_type):
     if tta_type == 'hflip':
         return flip_left_right(x, 2)
@@ -51,6 +53,8 @@ def get_new_shape(img_shape, max_shape=224):
 
 def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels):
     os.makedirs(output_dir, exist_ok=True)
+    if args.stacked_channels != 0:
+        warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
     model = make_model((None, None, 3 + stacked_channels))
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
