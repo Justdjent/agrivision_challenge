@@ -36,7 +36,7 @@ def run_experiment():
     print(f"Starting evaluation process of results in {prediction_dir}")
     evaluate(test_dir=test_data_dir,
              prediction_dir=prediction_dir,
-             output_csv=experiment_name,
+             output_csv=f"{experiment_name}_img_ious.csv",
              test_df_path=test_df,
              threshold=args.threshold,
              class_names=args.class_names)
