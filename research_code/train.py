@@ -43,8 +43,7 @@ def train():
     model_dir = os.path.join(experiment_dir, args.models_dir)
     log_dir = os.path.join(experiment_dir, args.log_dir)
     if os.path.exists(log_dir) and len(os.listdir(log_dir)) > 0:
-        warnings.showwarning("Logging directory for this experiment already exists and it is not empty. "
-                             "It might not be your first time running this experiment", UserWarning, 'train.py', 47)
+        raise ValueError("Please check if this experiment was already run (logs aren't empty)")
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
     best_model_file = \
