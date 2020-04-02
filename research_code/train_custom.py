@@ -4,15 +4,14 @@ import os
 import tensorflow as tf
 import pandas as pd
 from tensorflow.keras.optimizers import Adam
+from tqdm import tqdm
 from research_code.params import args
 from research_code.gradient_accumulator import GradientAccumulator
 from research_code.datasets_tf2 import DataGenerator_angles
 from research_code.losses import make_loss, dice_coef_clipped, dice_coef, dice_coef_border, mse_masked, angle_rmse
 from research_code.models import make_model
 
-logger = tf.get_logger()
-logger.setLevel(logging.DEBUG)
-
+tf.get_logger().setLevel(logging.INFO)
 
 class TrainLoop:
     # TODO: Add callback support
@@ -65,8 +64,8 @@ class TrainLoop:
         self.grad_accum.reset()
         
     @tf.function
-    def step(self, inputs, target, perform_update):
-        loss_values, grads = self.calculate_gradients(inputs, target)
+    def step(self, inputs, targets, perform_update):
+        loss_values, grads = self.calculate_gradients(inputs, targets)
         self.grad_accum(grads)
         if perform_update:
             self.apply_gradients()
@@ -74,6 +73,7 @@ class TrainLoop:
         
     # TODO: give this a dict {"train": {"loss":n, "metric":n}, "val": {}}
     # parse it and write logs accordingly
+    @tf.function
     def write_logs(self, data, step):
         with self.train_logger.as_default():
             tf.summary.scalar(name='loss', data=data, step=step)
@@ -81,20 +81,27 @@ class TrainLoop:
             tf.summary.scalar(name='loss', data=data, step=step)
         
     def train(self, train_dataset, val_dataset, epochs):
-        for epoch in range(epochs):
+        for epoch in range(1, epochs+1):
+            pbar = tqdm(total=len(train_dataset), desc=f"Epoch {epoch}/{epochs}")
             # NOTE: step_num doesn't update if it's a class attribute, so it's here.
-            for step_num, (inputs, target) in enumerate(train_dataset):
+            for step_num, (inputs, targets) in enumerate(train_dataset):
                 # FIXME? If epoch len % accum steps != 0 this will skip all the extra batches in the end
                 # NOTE: precalculating perform_update here speeds up self.step ALOT
                 perform_update = step_num % self.accum_steps
-                loss_values = self.step(inputs, target, perform_update)
-                
-                tf.print(tf.math.reduce_sum(loss_values))
+                loss_values = self.step(inputs, targets, perform_update)
+                total_loss = tf.math.reduce_sum(loss_values)
+                pbar.set_postfix_str(f"Loss: {total_loss:.5f}")
+                pbar.update(1)
                 
             # End epoch
-            # TODO: reset gradient accum
+            for inputs, targets in val_dataset:
+                outputs = model(inputs)
+            
+            
             self.grad_accum.reset()
             train_dataset.on_epoch_end()
+            val_dataset.on_epoch_end()
+            pbar.close()
 
     #TODO: add reset() to reset train loop's state
 
