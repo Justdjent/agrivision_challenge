@@ -16,6 +16,9 @@ class TrainLoop:
     # TODO: Add callback support
     # Can try TrainingContext() from tensorflow/python/keras/engine/training_v2.py
     def __init__(self, model, optimizer, loss, lr_scheduler, log_dir, accum_steps=1):
+        """
+        :param loss: loss object or a list of losses the size of model's outputs
+        """
         self.model = model
         self.optimizer = optimizer
         self.loss = loss
@@ -25,17 +28,22 @@ class TrainLoop:
         self.accum_steps = accum_steps
         self.grad_accum = GradientAccumulator()
     
-    @tf.function()
-    def calculate_loss(self, x, y, training):
-        y_ = self.model(x, training=training)
-        
-        return loss(y_true=y, y_pred=y_)
-
-    @tf.function()
+    def calculate_loss(self, inputs, targets, training):
+        outs = self.model(inputs, training=training)
+        outs = tf.nest.flatten(outs)
+        targets = tf.nest.flatten(targets)
+        # NOTE: Go here for examples of more functionality 
+        # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/engine/training_eager.py#L159
+        output_losses = []
+        for i, loss_fn in enumerate(self.loss):
+            out_loss = loss_fn(targets[i], outs[i])
+            output_losses.append(out_loss)
+        return output_losses
+    
     def calculate_gradients(self, inputs, targets):
         with tf.GradientTape() as tape:
-            loss_value = self.calculate_loss(inputs, targets, training=True)
-        return loss_value, tape.gradient(loss_value, model.trainable_variables)
+            loss_values = self.calculate_loss(inputs, targets, training=True)
+        return loss_values, tape.gradient(loss_values, self.model.trainable_variables)
     
     @tf.function()                
     def apply_gradients(self):
@@ -52,14 +60,13 @@ class TrainLoop:
         self.optimizer.apply_gradients(grads_and_vars)
         self.grad_accum.reset()
 
-    @tf.function()
     def step(self, inputs, target):
-        loss_value, grads = self.calculate_gradients(self.model, inputs, target)
+        loss_values, grads = self.calculate_gradients(inputs, target)
         self.grad_accum(grads)
         # NOTE: If epochs % accum steps != 0 this will skip all the extra batches
         if self.optimizer.iterations % self.accum_steps == 0:
             self.apply_gradients()
-        return loss_value
+        return loss_values
         
     # TODO: give this a dict {"train": {"loss":n, "metric":n}, "val": {}}
     # parse it and write logs accordingly
@@ -74,8 +81,8 @@ class TrainLoop:
     def train(self, train_dataset, val_dataset, epochs):
         for epoch in range(epochs):
             for inputs, target in train_dataset:
-                loss_value = self.step(inputs, target, accum_steps)
-                tf.print(loss_value)
+                loss_values = self.step(inputs, target)
+                # tf.print(loss_values)
                 
             # End epoch
             # TODO: reset gradient accum
@@ -94,14 +101,16 @@ def main():
     out_height = args.out_height
     out_width = args.out_width
     epochs = args.epochs
+    num_classes = len(args.class_names)
     log_dir = os.path.join('./logs', args.exp_name)
     
     # Params not in params.py
     input_channels = 3
     do_aug = True
-    accum_steps = 1
+    accum_steps = 6
     optimizer = Adam()
     lr_scheduler = lambda x: 0.001
+    loss_list = [make_loss('bce_dice') for i in range(num_classes)]
     model = make_model((None, None, input_channels))
     
     # Read dataset descriptions
@@ -117,7 +126,7 @@ def main():
         print('Using full size images, --use_crop=True to do crops')
     
     # Set up training
-    train_loop = TrainLoop(model, optimizer, loss, lr_scheduler, log_dir)
+    train_loop = TrainLoop(model, optimizer, loss_list, lr_scheduler, log_dir)
     train_generator = DataGenerator_angles(
         train_df,
         classes=class_names,
@@ -140,7 +149,7 @@ def main():
     )
     
     # Train
-    train_loop.train(train_generator, val_generator, epochs, accum_steps)
+    train_loop.train(train_generator, val_generator, epochs)
 
 if __name__ == "__main__":
     main()
