@@ -40,12 +40,13 @@ arg('--network', default='instance_unet')
 arg('--net_alias', default='')
 arg('--preprocessing_function', default='tf')
 arg('--mask_suffix', default='.png')
-arg('--dataset_df')
+arg('--dataset_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/full_df.csv')
 arg('--train_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/train_simple.csv') # /mnt/storage/ymi/geo_data/train_only_man_agr_7116.df
 arg('--val_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/val_simple.csv')
 arg('--test_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/val_simple.csv') # '/mnt/storage/ymi/geo_data/test_nrg_3580.df'
 arg('--inp_list', default='input_list_pegasus2_5E') # latest df train_man_nrg_cleaned_6116
 arg('--r_type', default='rgb', choices=['nrg', 'rgg', 'rgb'])
+arg('--exclude_bad_labels_df', default='/mnt/storage_4tb/ymi/datasets/Agriculture-Vision/checked_low_ious.csv')
 
 arg('--pred_mask_dir')
 arg('--pred_tta', action='store_true')

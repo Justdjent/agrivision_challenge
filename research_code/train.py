@@ -82,6 +82,11 @@ def train():
     dataset_df = pd.read_csv(args.dataset_df)
 
     train_df = dataset_df[dataset_df["ds_part"] == "train"]
+    if args.exclude_bad_labels_df:
+        invalid_df =pd.read_csv(args.exclude_bad_labels_df)
+        train_df = pd.merge(train_df, invalid_df, on='name', how='outer')
+        train_df['invalid'] = train_df['invalid'].fillna(False)
+        train_df = train_df[~train_df['invalid']]
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
 
     print('Training fold #{}, {} in train_ids, {} in val_ids'.format(args.fold, len(train_df), len(val_df)))
