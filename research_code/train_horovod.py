@@ -3,6 +3,8 @@ os.environ['LD_LIBRARY_PATH'] = '/usr/local/cuda-10.0/extras/CUPTI/lib64'
 import pandas as pd
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import backend as K
+import horovod.keras as hvd
 
 # from CyclicLearningRate import CyclicLR
 from research_code.datasets_tf2 import DataGenerator_angles #build_batch_generator, generate_filenames, build_batch_generator_angle
@@ -18,6 +20,15 @@ from keras.backend.tensorflow_backend import set_session
 
 
 def main():
+    # Horovod: initialize Horovod.
+    hvd.init()
+
+    # Horovod: pin GPU to be used to process local rank (one GPU per process)
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    config.gpu_options.visible_device_list = str(hvd.local_rank())
+    K.set_session(tf.Session(config=config))
+
     man_dir = args.manual_dataset_dir
 
     if args.net_alias is not None:
@@ -29,7 +40,7 @@ def main():
                                                     args.fold, args.input_width,
                                                     args.learning_rate, args.r_type) +\
         '-{epoch:d}-{val_loss:0.7f}.h5'
-    ch = 5
+    ch = 3
     # model = make_model((args.input_width, args.input_height, args.stacked_channels + ch))
     model = make_model((None, None, args.stacked_channels + ch))
     freeze_model(model, args.freeze_till_layer)
@@ -41,7 +52,7 @@ def main():
         model.load_weights(args.weights, by_name=True)
 
     optimizer = Adam(lr=args.learning_rate)
-
+    optimizer = hvd.DistributedOptimizer(optimizer)
     if args.show_summary:
         model.summary()
     num_classes = len(args.class_names)
@@ -55,7 +66,7 @@ def main():
                      "planter_skip":10}
     model.compile(loss=loss_list,
                   optimizer=optimizer,
-                  # loss_weights=class_weights,
+                  loss_weights=class_weights,
                   metrics=metrics_list)
 
     crop_size = None
@@ -101,11 +112,16 @@ def main():
                                                   save_weights_only=True,
                                                   mode='min')
 
-    callbacks = [best_model,
+    callbacks = [
+                 hvd.callbacks.BroadcastGlobalVariablesCallback(0),
                  EarlyStopping(patience=45, verbose=10),
                  TensorBoard(log_dir=os.path.join('./logs', args.exp_name), histogram_freq=0, write_graph=True, write_images=True)]
                  # ReduceLROnPlateau(monitor='val_dice_coef', mode='max', factor=0.2, patience=5, min_lr=0.00001,
                  #                  verbose=1)]
+    
+    if hvd.rank() == 0:
+        callbacks.append(best_model)
+
     if args.clr is not None:
         clr_params = args.clr.split(',')
         base_lr = float(clr_params[0])

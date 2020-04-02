@@ -51,7 +51,7 @@ def get_new_shape(img_shape, max_shape=224):
 
 def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels):
     os.makedirs(output_dir, exist_ok=True)
-    model = make_model((None, None, 3 + stacked_channels))
+    model = make_model((None, None, 5))
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
