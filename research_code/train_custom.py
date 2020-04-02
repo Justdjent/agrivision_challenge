@@ -9,7 +9,9 @@ from research_code.gradient_accumulator import GradientAccumulator
 from research_code.datasets_tf2 import DataGenerator_angles
 from research_code.losses import make_loss, dice_coef_clipped, dice_coef, dice_coef_border, mse_masked, angle_rmse
 from research_code.models import make_model
-tf.get_logger().setLevel(logging.INFO)
+
+logger = tf.get_logger()
+logger.setLevel(logging.DEBUG)
 
 
 class TrainLoop:
@@ -27,7 +29,8 @@ class TrainLoop:
         self.val_logger = tf.summary.create_file_writer(os.path.join(log_dir,'val'))
         self.accum_steps = accum_steps
         self.grad_accum = GradientAccumulator()
-    
+        
+    @tf.function
     def calculate_loss(self, inputs, targets, training):
         outs = self.model(inputs, training=training)
         outs = tf.nest.flatten(outs)
@@ -40,31 +43,32 @@ class TrainLoop:
             output_losses.append(out_loss)
         return output_losses
     
+    @tf.function
     def calculate_gradients(self, inputs, targets):
         with tf.GradientTape() as tape:
             loss_values = self.calculate_loss(inputs, targets, training=True)
         return loss_values, tape.gradient(loss_values, self.model.trainable_variables)
     
-    @tf.function()                
+    @tf.function          
     def apply_gradients(self):
-        # TODO: add gradient clipping
+        # TODO: consider adding gradient clipping
         grads_and_vars = []
 
         for gradient, variable in zip(self.grad_accum.gradients, self.model.trainable_variables):
             if gradient is not None:
-                scaled_gradient = gradient / (args["n_device"] * args["gradient_accumulation_steps"])
+                scaled_gradient = gradient / self.accum_steps
                 grads_and_vars.append((scaled_gradient, variable))
             else:
                 grads_and_vars.append((gradient, variable))
         
         self.optimizer.apply_gradients(grads_and_vars)
         self.grad_accum.reset()
-
-    def step(self, inputs, target):
+        
+    @tf.function
+    def step(self, inputs, target, perform_update):
         loss_values, grads = self.calculate_gradients(inputs, target)
         self.grad_accum(grads)
-        # NOTE: If epochs % accum steps != 0 this will skip all the extra batches
-        if self.optimizer.iterations % self.accum_steps == 0:
+        if perform_update:
             self.apply_gradients()
         return loss_values
         
@@ -76,17 +80,29 @@ class TrainLoop:
         with self.val_logger.as_default():
             tf.summary.scalar(name='loss', data=data, step=step)
         
-    #TODO: add reset() to reset train loop's state
-
     def train(self, train_dataset, val_dataset, epochs):
         for epoch in range(epochs):
-            for inputs, target in train_dataset:
-                loss_values = self.step(inputs, target)
-                # tf.print(loss_values)
+            # NOTE: step_num doesn't update if it's a class attribute, so it's here.
+            for step_num, (inputs, target) in enumerate(train_dataset):
+                # FIXME? If epoch len % accum steps != 0 this will skip all the extra batches in the end
+                # NOTE: precalculating perform_update here speeds up self.step ALOT
+                perform_update = step_num % self.accum_steps
+                loss_values = self.step(inputs, target, perform_update)
+                
+                tf.print(tf.math.reduce_sum(loss_values))
                 
             # End epoch
             # TODO: reset gradient accum
+            self.grad_accum.reset()
             train_dataset.on_epoch_end()
+
+    #TODO: add reset() to reset train loop's state
+
+
+@tf.function
+def constant_scheduler(lr):
+    return lr
+
 
 def main():
     # Params
@@ -107,9 +123,9 @@ def main():
     # Params not in params.py
     input_channels = 3
     do_aug = True
-    accum_steps = 6
+    accum_steps = 2
     optimizer = Adam()
-    lr_scheduler = lambda x: 0.001
+    lr_scheduler = constant_scheduler(0.001)
     loss_list = [make_loss('bce_dice') for i in range(num_classes)]
     model = make_model((None, None, input_channels))
     
@@ -126,7 +142,7 @@ def main():
         print('Using full size images, --use_crop=True to do crops')
     
     # Set up training
-    train_loop = TrainLoop(model, optimizer, loss_list, lr_scheduler, log_dir)
+    train_loop = TrainLoop(model, optimizer, loss_list, lr_scheduler, log_dir, accum_steps)
     train_generator = DataGenerator_angles(
         train_df,
         classes=class_names,
@@ -135,7 +151,7 @@ def main():
         shuffle=True,
         out_size=(args.out_height, args.out_width),
         crop_size=crop_size,
-        aug=do_aug
+        aug=do_aug,
     )
     val_generator = DataGenerator_angles(
         val_df,
