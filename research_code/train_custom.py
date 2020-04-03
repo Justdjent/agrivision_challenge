@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import tensorflow as tf
+import numpy as np
 import pandas as pd
 from tensorflow.keras.optimizers import Adam
 from tqdm import tqdm
@@ -10,20 +11,22 @@ from research_code.gradient_accumulator import GradientAccumulator
 from research_code.datasets_tf2 import DataGenerator_angles
 from research_code.losses import make_loss, dice_coef_clipped, dice_coef, dice_coef_border, mse_masked, angle_rmse
 from research_code.models import make_model
+from research_code.evaluate import m_iou, compute_confusion_matrix   
 
 tf.get_logger().setLevel(logging.INFO)
+
+CLASSES = args.class_names
 
 class TrainLoop:
     # TODO: Add callback support
     # Can try TrainingContext() from tensorflow/python/keras/engine/training_v2.py
-    def __init__(self, model, optimizer, loss, lr_scheduler, log_dir, accum_steps=1):
+    def __init__(self, model, optimizer, loss, log_dir, accum_steps=1):
         """
         :param loss: loss object or a list of losses the size of model's outputs
         """
         self.model = model
         self.optimizer = optimizer
         self.loss = loss
-        self.lr_scheduler = lr_scheduler
         self.train_logger = tf.summary.create_file_writer(os.path.join(log_dir,'train'))
         self.val_logger = tf.summary.create_file_writer(os.path.join(log_dir,'val'))
         self.accum_steps = accum_steps
@@ -82,33 +85,50 @@ class TrainLoop:
         
     def train(self, train_dataset, val_dataset, epochs):
         for epoch in range(1, epochs+1):
-            pbar = tqdm(total=len(train_dataset), desc=f"Epoch {epoch}/{epochs}")
+            # Training
+            pbar = tqdm(total=len(train_dataset), desc=f"Train | Epoch {epoch}/{epochs}")
             # NOTE: step_num doesn't update if it's a class attribute, so it's here.
             for step_num, (inputs, targets) in enumerate(train_dataset):
-                # FIXME? If epoch len % accum steps != 0 this will skip all the extra batches in the end
                 # NOTE: precalculating perform_update here speeds up self.step ALOT
+                # FIXME? If epoch len % accum steps != 0 this will skip all the extra batches in the end
                 perform_update = step_num % self.accum_steps
                 loss_values = self.step(inputs, targets, perform_update)
+                loss_values_dict = dict(zip(CLASSES, loss_values))
                 total_loss = tf.math.reduce_sum(loss_values)
-                pbar.set_postfix_str(f"Loss: {total_loss:.5f}")
+                loss_values_dict['Loss'] = total_loss
+                pbar.set_postfix({k: f"{v:.3f}" for k, v in loss_values_dict.items()})
                 pbar.update(1)
                 
+            pbar.close()
+            
+            # TODO: Add validation, model saving, 
+            
+            # # Validation
+            # pbar = tqdm(total=len(train_dataset), desc=f"Valid | Epoch {epoch}/{epochs}")
+            # # FIXME: technically, a 0 here is incorrect,
+            # # but in 10k+ results one zero doesn't matter that much
+            # mean_conf_matrix = np.fill(len())
+            # for inputs, targets in val_dataset:
+            #     outputs = model(inputs)
+            #     outputs = tf.nest.flatten(outputs)
+            #     outputs = [o.numpy()[0] for o in outputs]
+            #     outputs = np.dstack(outputs, axis=-1)
+            #     outputs = outputs > 
+            #     background = np.logical_or.recude(, axis=-1)
+                
+            #     # Calculate validation metric
+            #     conf = compute_confusion_matrix(,)
+            #     total_ioum, class_ioum = m_iou(conf, len(CLASSES)) 
+            #     pbar.set_postfix({k: f"{v:.3f}" for k, v in loss_values_dict.items()})
+            #     pbar.update(1)
+
+            
             # End epoch
-            for inputs, targets in val_dataset:
-                outputs = model(inputs)
-            
-            
             self.grad_accum.reset()
             train_dataset.on_epoch_end()
             val_dataset.on_epoch_end()
-            pbar.close()
 
     #TODO: add reset() to reset train loop's state
-
-
-@tf.function
-def constant_scheduler(lr):
-    return lr
 
 
 def main():
@@ -132,7 +152,6 @@ def main():
     do_aug = True
     accum_steps = 2
     optimizer = Adam()
-    lr_scheduler = constant_scheduler(0.001)
     loss_list = [make_loss('bce_dice') for i in range(num_classes)]
     model = make_model((None, None, input_channels))
     
@@ -149,7 +168,7 @@ def main():
         print('Using full size images, --use_crop=True to do crops')
     
     # Set up training
-    train_loop = TrainLoop(model, optimizer, loss_list, lr_scheduler, log_dir, accum_steps)
+    train_loop = TrainLoop(model, optimizer, loss_list, log_dir, accum_steps)
     train_generator = DataGenerator_angles(
         train_df,
         classes=class_names,
@@ -162,9 +181,10 @@ def main():
     )
     val_generator = DataGenerator_angles(
         val_df,
-        classes=args.class_names,
+        classes=class_names,
         img_dir=man_dir,
-        batch_size=batch_size,
+        # FIXME: This MUST be one for now 
+        batch_size=1,
         shuffle=True,
         out_size=(args.out_height, args.out_width),
         crop_size=crop_size,
