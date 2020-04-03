@@ -59,9 +59,10 @@ def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_name
 def run_experiment():
     dataset_df = pd.read_csv(args.dataset_df)
     classes = args.class_names
-    classes.pop('background')
-    precompute_background_class(args.train_dir, dataset_df[["ds_part"] == 'train'], classes)
-    precompute_background_class(args.val_dir, dataset_df[["ds_part"] == 'val'], classes)
+    if 'background' in classes:
+        classes.remove('background')
+    precompute_background_class(args.train_dir, dataset_df[dataset_df["ds_part"] == 'train'], classes)
+    precompute_background_class(args.val_dir, dataset_df[dataset_df["ds_part"] == 'val'], classes)
 
     experiment_dir, model_dir, experiment_name = train()
     prediction_dir = os.path.join(experiment_dir, "predictions")
