@@ -51,11 +51,11 @@ def get_new_shape(img_shape, max_shape=224):
     return new_shape
 
 
-def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels):
+def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels, network):
     os.makedirs(output_dir, exist_ok=True)
     if args.stacked_channels != 0:
         warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
-    model = make_model((None, None, 3 + stacked_channels))
+    model = make_model((None, None, 3 + stacked_channels), network)
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
@@ -86,4 +86,5 @@ if __name__ == '__main__':
             weights_path=args.weights,
             test_df_path=args.test_df,
             test_data_dir=args.test_data_dir,
-            stacked_channels=args.stacked_channels)
+            stacked_channels=args.stacked_channels,
+            network=args.network)

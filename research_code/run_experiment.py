@@ -40,7 +40,8 @@ def run_experiment():
             weights_path=weights_path,
             test_df_path=test_df_path,
             test_data_dir=test_data_dir,
-            stacked_channels=args.stacked_channels)
+            stacked_channels=args.stacked_channels,
+            network=args.network)
     print(f"Starting evaluation process of results in {prediction_dir}")
     evaluate(test_dir=test_data_dir,
              prediction_dir=prediction_dir,
