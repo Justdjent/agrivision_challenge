@@ -16,11 +16,11 @@ numpy==1.14.5
 opencv-python==3.4.0.12
 Pillow==5.0.0
 pyparsing==2.2.0
-pyproj==2.4.2
+# pyproj==2.4.2
 python-dateutil==2.7.2
 pytz==2018.3
 PyWavelets==0.5.2
-rasterio==1.0.24
+# rasterio==1.0.24
 requests==2.18.4
 scikit-image==0.13.1
 scikit-learn==0.19.1
@@ -40,5 +40,5 @@ Keras-Applications==1.0.8
 keras-resnet==0.1.0
 pandas==0.23.4
 h5py==2.8.0
-geopandas==0.4.0
+# geopandas==0.4.0
 sknw==0.13
