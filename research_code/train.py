@@ -6,8 +6,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoa
 from tensorflow.keras.optimizers import Adam
 
 # from CyclicLearningRate import CyclicLR
-from research_code.datasets_tf2 import \
-    DataGenerator_angles
+from research_code.datasets_tf2 import DataGenerator_angles, DataGenerator_v2
 from research_code.losses import make_loss, dice_coef
 from research_code.models import make_model
 from research_code.params import args
@@ -34,7 +33,7 @@ def train():
     if args.exp_name is None:
         raise ValueError("Please add a name for your experiment - exp_name argument")
     setup_env()
-    train_dir = args.train_dir
+    train_dir = args.val_dir
     val_dir = args.val_dir
 
     if args.net_alias is not None:
@@ -53,7 +52,12 @@ def train():
                                                     args.learning_rate, args.r_type) + \
         '-{epoch:d}-{val_loss:0.7f}.h5'
     ch = 3
-    model = make_model((None, None, args.stacked_channels + ch))
+    activation = args.activation
+    model = make_model((None, None, args.stacked_channels + ch),
+                       network=args.network,
+                       channels=len(args.class_names),
+                       activation=activation)
+
     freeze_model(model, args.freeze_till_layer)
     if args.weights is None:
         print('No weights passed, training from scratch')
@@ -65,9 +69,8 @@ def train():
 
     if args.show_summary:
         model.summary()
-    num_classes = len(args.class_names)
-    loss_list = [make_loss('bce_dice') for i in range(num_classes)]
-    metrics_list = [dice_coef for i in range(num_classes)]
+    loss_list = [make_loss('bce_dice')]
+    metrics_list = [dice_coef]
     model.compile(loss=loss_list,
                   optimizer=optimizer,
                   metrics=metrics_list)
@@ -88,10 +91,11 @@ def train():
         train_df['invalid'] = train_df['invalid'].fillna(False)
         train_df = train_df[~train_df['invalid']]
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
+    train_df = val_df
 
     print('Training fold #{}, {} in train_ids, {} in val_ids'.format(args.fold, len(train_df), len(val_df)))
 
-    train_generator = DataGenerator_angles(
+    train_generator = DataGenerator_v2(
         train_df,
         classes=args.class_names,
         img_dir=train_dir,
@@ -100,10 +104,12 @@ def train():
         out_size=(args.out_height, args.out_width),
         crop_size=crop_size,
         # mask_dir=mask_dir,
-        aug=args.use_aug
+        aug=args.use_aug,
+        validate_pixels=True,
+        activation=activation
     )
 
-    val_generator = DataGenerator_angles(
+    val_generator = DataGenerator_v2(
         val_df,
         classes=args.class_names,
         img_dir=val_dir,
@@ -112,7 +118,9 @@ def train():
         out_size=(args.out_height, args.out_width),
         crop_size=crop_size,
         # mask_dir=mask_dir,
-        aug=False
+        aug=False,
+        validate_pixels=True,
+        activation=activation
     )
 
     best_model = ModelCheckpoint(best_model_file, monitor='val_loss',

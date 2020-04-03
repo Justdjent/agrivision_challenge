@@ -4,7 +4,7 @@ from tensorflow.keras import Model
 from tensorflow.keras.layers import Conv2D, UpSampling2D, Conv2DTranspose, ConvLSTM2D, Flatten, Conv3D
 from tensorflow.keras.layers import Activation, SpatialDropout2D
 from tensorflow.keras.layers import concatenate
-from tensorflow.keras.layers import Dense, Multiply, Add, Lambda
+from tensorflow.keras.layers import Dense, Multiply, Add, Lambda, GlobalAveragePooling2D
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.layers import MaxPooling2D
 import tensorflow.keras.backend as KB
@@ -12,18 +12,20 @@ import tensorflow as tf
 
 from research_code.resnet50_fixed import ResNet50, ResNet50_multi
 from research_code.params import args
-from research_code.sel_models.unets import (create_pyramid_features, conv_relu, prediction_fpn_block, conv_bn_relu, decoder_block_no_bn)
+from research_code.sel_models.unets import (create_pyramid_features, conv_relu, prediction_fpn_block, conv_bn_relu,
+                                            decoder_block_no_bn)
 import numpy as np
 from research_code.coord_conv import CoordinateChannel2D
+
 COORD_CONV_SETTING = True
 
-# class_names =
 
-
-def conv_block_simple(prevlayer, filters, prefix, strides=(1, 1), activation='relu', kernel_size=3, coord_conv=args.coord_conv):
+def conv_block_simple(prevlayer, filters, prefix, strides=(1, 1), activation='relu', kernel_size=3,
+                      coord_conv=args.coord_conv):
     if coord_conv:
         prevlayer = CoordinateChannel2D()(prevlayer)
-    conv = Conv2D(filters, (kernel_size, kernel_size), padding="same", kernel_initializer="he_normal", strides=strides, name=prefix + "_conv")(prevlayer)
+    conv = Conv2D(filters, (kernel_size, kernel_size), padding="same", kernel_initializer="he_normal", strides=strides,
+                  name=prefix + "_conv")(prevlayer)
     conv = BatchNormalization(name=prefix + "_bn")(conv)
     if activation:
         conv = Activation(activation, name=prefix + "_activation")(conv)
@@ -31,22 +33,25 @@ def conv_block_simple(prevlayer, filters, prefix, strides=(1, 1), activation='re
 
 
 def conv_block_dilated(prevlayer, filters, prefix, strides=(1, 1)):
-    conv = Conv2D(filters, (3, 3), dilation_rate=2, padding="same", kernel_initializer="he_normal", strides=strides, name=prefix + "_conv")(prevlayer)
+    conv = Conv2D(filters, (3, 3), dilation_rate=2, padding="same", kernel_initializer="he_normal", strides=strides,
+                  name=prefix + "_conv")(prevlayer)
     conv = BatchNormalization(name=prefix + "_bn")(conv)
     conv = Activation('relu', name=prefix + "_activation")(conv)
     return conv
 
+
 def conv_block_simple_no_bn(prevlayer, filters, prefix, strides=(1, 1), coord_conv=args.coord_conv):
     if coord_conv:
         prevlayer = CoordinateChannel2D()(prevlayer)
-    conv = Conv2D(filters, (3, 3), padding="same", kernel_initializer="he_normal", strides=strides, name=prefix + "_conv")(prevlayer)
+    conv = Conv2D(filters, (3, 3), padding="same", kernel_initializer="he_normal", strides=strides,
+                  name=prefix + "_conv")(prevlayer)
     conv = Activation('relu', name=prefix + "_activation")(conv)
     return conv
 
 
 def cse_block(prevlayer, prefix):
     mean = Lambda(lambda xin: KB.mean(xin, axis=[1, 2]))(prevlayer)
-    lin1 = Dense(KB.int_shape(prevlayer)[3]//2, name=prefix + 'cse_lin1', activation='relu')(mean)
+    lin1 = Dense(KB.int_shape(prevlayer)[3] // 2, name=prefix + 'cse_lin1', activation='relu')(mean)
     lin2 = Dense(KB.int_shape(prevlayer)[3], name=prefix + 'cse_lin2', activation='sigmoid')(lin1)
     x = Multiply()([prevlayer, lin2])
 
@@ -163,6 +168,7 @@ Unet with Mobile net encoder
 Uses caffe preprocessing function
 """
 
+
 def get_unet_resnet(input_shape):
     # model.add(Convolution2D(64, 3, 3, activation='relu'))
     # resh_conv = Conv2D()
@@ -268,7 +274,6 @@ def get_csse_unet_resnet(input_shape):
 
 
 def csse_resnet50_fpn(input_shape, channels=1, activation="sigmoid", coord_conv=args.coord_conv):
-
     resnet_base = ResNet50(input_shape=input_shape, include_top=False)
     if args.show_summary:
         resnet_base.summary()
@@ -312,7 +317,6 @@ def csse_resnet50_fpn(input_shape, channels=1, activation="sigmoid", coord_conv=
 
 
 def angle_net_csse_resnet50_fpn(input_shape, channels=1):
-
     resnet_base = ResNet50(input_shape=input_shape, include_top=False)
     if args.show_summary:
         resnet_base.summary()
@@ -356,22 +360,13 @@ def angle_net_csse_resnet50_fpn(input_shape, channels=1):
 
 
 def csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid"):
-    # img_input = Input(input_shape)
-    # conv_reshape = Conv2D(filters=3, kernel_size=(1, 1),
-    #            strides=(1, 1), padding='same',
-    #            kernel_initializer="he_normal",
-    #            use_bias=False,
-    #            name="input_conv")(img_input)
     resnet_input = tuple([input_shape[0], input_shape[1], 3])
-    # resnet_base = ResNet50(img_input, include_top=True)
-    # resnet_base.load_weights(download_resnet_imagenet("resnet50"))
-    #resnet_base = ResNet50(input_shape=input_shape, include_top=False)
     resnet_base = ResNet50(input_shape=input_shape, include_top=False, weights=None)
     resnet_base_we = ResNet50_multi(input_shape=resnet_input, include_top=False)
 
     conv_weights, conv_bias = resnet_base_we.layers[1].get_weights()
     # getting new_weights
-    new_weights = np.random.normal(size=(7, 7, 4, 64), loc=0, scale=0.2)
+    new_weights = np.random.normal(size=(7, 7, input_shape[-1], 64), loc=0, scale=0.2)
     new_weights[:, :, :3, :] = conv_weights
 
     for i in resnet_base_we.layers:
@@ -387,23 +382,22 @@ def csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid"):
 
     for l in resnet_base.layers:
         l.trainable = True
-    #resnet_base.get_layer('conv1')(conv_reshape)
 
-    conv1 = resnet_base.get_layer("activation_1").output
+    conv1 = resnet_base.get_layer("activation").output
     conv1 = csse_block(conv1, "csse_1")
-    resnet_base.get_layer("max_pooling2d_1")(conv1)
-    conv2 = resnet_base.get_layer("activation_10").output
-    conv2 = csse_block(conv2, "csse_10")
+    resnet_base.get_layer("max_pooling2d")(conv1)
+    conv2 = resnet_base.get_layer("activation_9").output
+    conv2 = csse_block(conv2, "csse_ngle_net9")
     resnet_base.get_layer("res3a_branch2a")(conv2)
-    conv3 = resnet_base.get_layer("activation_22").output
-    conv3 = csse_block(conv3, "csse_22")
+    conv3 = resnet_base.get_layer("activation_21").output
+    conv3 = csse_block(conv3, "csse_21")
     resnet_base.get_layer("res4a_branch2a")(conv3)
-    conv4 = resnet_base.get_layer("activation_40").output
-    conv4 = csse_block(conv4, "csse_40")
+    conv4 = resnet_base.get_layer("activation_39").output
+    conv4 = csse_block(conv4, "csse_39")
     resnet_base.get_layer("res5a_branch2a")(conv4)
-    conv5 = resnet_base.get_layer("activation_49").output
-    conv5 = csse_block(conv5, "csse_49")
-    resnet_base.get_layer("avg_pool")(conv5)
+    conv5 = resnet_base.get_layer("activation_48").output
+    conv5 = csse_block(conv5, "csse_48")
+
     P1, P2, P3, P4, P5 = create_pyramid_features(conv1, conv2, conv3, conv4, conv5)
     x = concatenate(
         [
@@ -426,9 +420,6 @@ def csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid"):
 
 
 def resnet50_fpn(input_shape, channels=1, activation="sigmoid"):
-    # img_input = Input(input_shape)
-    # resnet_base = ResNet50(img_input, include_top=True)
-    # resnet_base.load_weights(download_resnet_imagenet("resnet50"))
     resnet_base = ResNet50(input_shape=input_shape, include_top=False)
 
     if args.show_summary:
@@ -436,11 +427,6 @@ def resnet50_fpn(input_shape, channels=1, activation="sigmoid"):
 
     for l in resnet_base.layers:
         l.trainable = True
-    # conv1 = resnet_base.get_layer("conv1_relu").output
-    # conv2 = resnet_base.get_layer("res2c_relu").output
-    # conv3 = resnet_base.get_layer("res3d_relu").output
-    # conv4 = resnet_base.get_layer("res4f_relu").output
-    # conv5 = resnet_base.get_layer("res5c_relu").output
     conv1 = resnet_base.get_layer("activation_1").output
     conv2 = resnet_base.get_layer("activation_10").output
     conv3 = resnet_base.get_layer("activation_22").output
@@ -463,6 +449,7 @@ def resnet50_fpn(input_shape, channels=1, activation="sigmoid"):
     x = Conv2D(channels, (1, 1), activation=activation, name="mask")(x)
     model = Model(resnet_base.input, x)
     return model
+
 
 def get_csse_hypercolumn_resnet(input_shape):
     resnet_base = ResNet50(input_shape=input_shape, include_top=False)
@@ -675,7 +662,7 @@ def get_instance_unet_3(input_shape):
 
     conv7 = SpatialDropout2D(0.2)(conv7)
     semantic = Conv2D(1, (1, 1), activation="sigmoid", name="semantic")(conv7)
-    #conv8 = Conv2D(10, (1, 1), activation="relu", name="classifier")(conv7)
+    # conv8 = Conv2D(10, (1, 1), activation="relu", name="classifier")(conv7)
     instance = Conv2D(1, (1, 1), activation="sigmoid", name="instance")(conv7)
     border = Conv2D(1, (1, 1), activation="sigmoid", name="border")(conv7)
     model = Model(img_input, [semantic, instance, border])
@@ -714,7 +701,7 @@ def get_instance_unet_dilated(input_shape):
 
     conv7 = SpatialDropout2D(0.2)(conv7)
     semantic = Conv2D(1, (1, 1), activation="sigmoid", name="semantic")(conv7)
-    #conv8 = Conv2D(10, (1, 1), activation="relu", name="classifier")(conv7)
+    # conv8 = Conv2D(10, (1, 1), activation="relu", name="classifier")(conv7)
     instance = Conv2D(1, (1, 1), activation="sigmoid", name="instance")(conv7)
     model = Model(img_input, [semantic, instance])
     return model
@@ -796,7 +783,7 @@ def get_anglenet_unet(input_shape, num_angles=180):
     conv7 = SpatialDropout2D(0.2)(conv7)
     conv8 = Conv2D(num_angles, (1, 1), activation=None, name="conv")(conv7)
     prediction = tf.nn.softmax(conv8, axis=-1, name="prediction_anglenet")
-    #prediction = Conv2D(num_angles, (1, 1), activation="sigmoid", name="prediction")(conv7)
+    # prediction = Conv2D(num_angles, (1, 1), activation="sigmoid", name="prediction")(conv7)
     model = Model(img_input, prediction)
     return model
 
@@ -811,7 +798,6 @@ def angle_net_head(input_layer, grid_size, num_angles):
                                                 method='bicubic'))(x)
     prediction = tf.nn.softmax(desc, axis=-1, name="prediction_anglenet")
     return prediction
-
 
 
 def get_angle_net(input_shape, grid_size=8, num_angles=180):
@@ -831,7 +817,6 @@ def get_angle_net(input_shape, grid_size=8, num_angles=180):
     conv4 = conv_block_simple(pool3, 128, "conv4_1")
     conv4 = conv_block_simple(conv4, 128, "conv4_2")
 
-
     angles = angle_net_head(conv4, grid_size, num_angles)
     model = Model(img_input, angles)
     return model
@@ -849,13 +834,11 @@ def lstm_encoder(img_input):
     up_2 = UpSampling2D()(conv2)
     conv_up_2 = conv_block_simple(up_2, 64, "conv_up2")
 
-
     conv3 = conv_block_simple(pool2, 256, "conv3_1")
     conv3 = conv_block_simple(conv3, 256, "conv3_2")
     up_3 = UpSampling2D(size=(4, 4))(conv3)
     conv_up_3 = conv_block_simple(up_3, 64, "conv_up3")
     pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
-
 
     conv4 = conv_block_simple(pool3, 512, "conv4_1")
     conv4 = conv_block_simple(conv4, 512, "conv4_2")
@@ -873,6 +856,7 @@ def lstm_encoder(img_input):
     pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool6")(conv7)
     return pool3
 
+
 def lstm_resnet_encoder(img_input):
     resnet_base = ResNet50(input_tensor=img_input, include_top=False)
 
@@ -885,7 +869,7 @@ def lstm_resnet_encoder(img_input):
     conv1 = resnet_base.get_layer("activation").output
     conv2 = resnet_base.get_layer("activation_9").output
     conv3 = resnet_base.get_layer("activation_21").output
-    #conv4 = resnet_base.get_layer("activation_39").output
+    # conv4 = resnet_base.get_layer("activation_39").output
     conv4 = resnet_base.get_layer("activation_48").output
 
     up_2 = UpSampling2D(size=(2, 2))(conv2)
@@ -904,9 +888,10 @@ def lstm_resnet_encoder(img_input):
 
     conv7 = conv_block_simple(pool6, 128, "conv7_2")
     conv8 = conv_block_simple(conv7, 128, "conv8_2")
-    #pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool6")(conv7)
+    # pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool6")(conv7)
 
     return conv8
+
 
 def get_traj_conv_lstm(img_input_shape, point_input_shape):
     img_input = Input(img_input_shape, name='image_input')
@@ -918,7 +903,7 @@ def get_traj_conv_lstm(img_input_shape, point_input_shape):
     lstm_input = concatenate([features, point_input], axis=-1)
 
     conv_lstm_1 = ConvLSTM2D(filters=64, kernel_size=(3, 3),
-               padding='same', return_sequences=True, name="conv_lstm1")(lstm_input)
+                             padding='same', return_sequences=True, name="conv_lstm1")(lstm_input)
     conv_lstm_1 = BatchNormalization()(conv_lstm_1)
 
     conv_lstm_2 = ConvLSTM2D(filters=16, kernel_size=(3, 3),
@@ -926,21 +911,29 @@ def get_traj_conv_lstm(img_input_shape, point_input_shape):
     conv_lstm_2 = BatchNormalization()(conv_lstm_2)
 
     prediction = Conv3D(filters=1, kernel_size=(3, 3, 3),
-           activation='sigmoid',
-           padding='same', data_format='channels_last', name='point_pred')(conv_lstm_2)
-    #flat_features = Flatten()(conv_lstm_2)
+                        activation='sigmoid',
+                        padding='same', data_format='channels_last', name='point_pred')(conv_lstm_2)
+    # flat_features = Flatten()(conv_lstm_2)
     # out_y = Dense(units=32)(flat_features)
     # out_y = Activation('softmax', name='output_y')(out_y)
     #
     # out_x = Dense(units=32)(flat_features)
     # out_x = Activation('softmax', name='output_x')(out_x)
-    #prediction = Dense(32*32+1, activation='softmax', name='point_pred')(flat_features)
+    # prediction = Dense(32*32+1, activation='softmax', name='point_pred')(flat_features)
     model = Model([img_input, point_input], prediction)
     return model
 
 
-def make_model(input_shape):
-    network = args.network
+def add_classification_head(input_shape, segmentation_model, encoder_output_name, num_classes):
+    model_base = make_model(input_shape, segmentation_model)
+    encoder_output = model_base.get_layer(encoder_output_name).output
+    x = GlobalAveragePooling2D(name="avg_pool_classification_head")(encoder_output)
+    classes = Dense(num_classes, activation='sigmoid', name='classes_prediction')(x)
+    final_model = Model(inputs=[model_base.input], outputs=[model_base.output, classes])
+    return final_model
+
+
+def make_model(input_shape, network, **kwargs):
     if network == 'resnet50':
         return get_unet_resnet(input_shape)
     elif network == 'csse_resnet50':
@@ -960,13 +953,16 @@ def make_model(input_shape):
     elif network == 'csse_unet':
         return get_csse_unet(input_shape)
     elif network == 'resnet50_fpn':
-        return resnet50_fpn(input_shape, channels=1, activation="sigmoid")
+        return resnet50_fpn(input_shape, **kwargs)
     elif network == 'csse_resnet50_fpn':
-        return csse_resnet50_fpn(input_shape, channels=1, activation="sigmoid")
+        return csse_resnet50_fpn(input_shape, **kwargs)
     elif network == 'csse_resnet50_fpn_multi':
-        return csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid")
-    elif network == "csse_restnet_50_fpn_instance":
-        return csse_resnet50_fpn_instance(input_shape, channels=1, activation="sigmoid")
+        return csse_resnet50_fpn_multi(input_shape, **kwargs)
+    elif network == "csse_resnet_50_fpn_instance":
+        return csse_resnet50_fpn_instance(input_shape, **kwargs)
+    elif network == "csse_resnet_50_fpn_instance_cls_head":
+        return add_classification_head(input_shape, "csse_resnet_50_fpn_instance", **kwargs)
+    # Should we remove these models?
     elif network == "angle_net":
         return get_angle_net(input_shape)
     elif network == "dist_net":
