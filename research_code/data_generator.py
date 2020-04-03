@@ -14,7 +14,7 @@ import albumentations as albu
 
 
 def reshape(reshape_size=(512,512)):
-    return albu.Compose([albu.Resize(reshape_size[0], reshape_size[1], p=1)], p=1)
+    return albu.Compose([albu.Resize(reshape_size[0], reshape_size[1], interpolation=cv2.INTER_NEAREST, p=1)], p=1)
 
 
 def strong_aug(crop_size=(512,512)):
