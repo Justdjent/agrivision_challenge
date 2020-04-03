@@ -9,7 +9,6 @@ import tensorflow as tf
 from tqdm import tqdm
 from research_code.params import args
 from research_code.models import make_model
-from research_code.random_transform_mask import pad_size
 from keras.applications import imagenet_utils
 from tensorflow.image import flip_left_right
 
@@ -64,7 +63,6 @@ def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, 
         img_path = os.path.join(test_data_dir, 'images', "rgb", row['name'])
         img = cv2.imread(img_path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img, pads = pad_size(img)
         x = np.expand_dims(img, axis=0)
         x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
         preds = model.predict(x)

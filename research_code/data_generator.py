@@ -1,15 +1,11 @@
 import os
-import random
 from collections import defaultdict
 
 import cv2
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 from keras_applications import imagenet_utils
-from research_code.params import args
 from sklearn.utils import shuffle as skl_shuffle
-from tensorflow.keras.preprocessing.image import img_to_array, load_img
 import albumentations as albu
 
 
@@ -93,7 +89,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
                      ]
 
         # Generate data
-        X, y = self.__data_generation(batch_data)
+        X, y = self._data_generation(batch_data)
 
         return X, y
 
@@ -119,7 +115,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         mask_img = np.invert(mask_img)
         return mask_img
 
-    def __data_generation(self, batch_data):
+    def _data_generation(self, batch_data):
         """Generates data containing batch_size samples 
            X : (n_samples, *dim, n_channels)
         """
@@ -155,18 +151,14 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
                 res = self.aug(image=img, mask=targets)
                 img, targets = res['image'], res['mask']
 
-            # FIXME: Remove as soon as moved to new models
             for i, c in enumerate(self.classes):
                 batch_y[c].append(targets[:, :, i])
 
             batch_x.append(img)
-            # batch_y.append(targets)
 
         batch_x = np.array(batch_x, np.float32)
         batch_y = {k: np.array(v, np.float32) for k, v in batch_y.items()}
         batch_y = {k: np.expand_dims(v, axis=-1) for k, v in batch_y.items()}
-        # FIXME: Uncomment when moved to new models
-        # batch_y = np.array(batch_y, np.float32)
 
         return (
             imagenet_utils.preprocess_input(batch_x, "channels_last", mode="tf"),
@@ -197,7 +189,7 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
         self.validate_pixels = validate_pixels
         self.on_epoch_end()
 
-    def __data_generation(self, list_IDs_temp):
+    def _data_generation(self, list_IDs_temp):
         'Generates data containing batch_size samples'  # X : (n_samples, *dim, n_channels)
         # Initialization
         train_batch = list_IDs_temp
@@ -215,7 +207,7 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             if self.validate_pixels:
                 not_valid_mask = self.read_masks_borders(item_data['name'])
             else:
-                not_valid_mask = np.zeros(img.shape)
+                not_valid_mask = np.zeros(img.shape, dtype=np.bool)
             img[not_valid_mask] = 0
 
             targets = np.zeros((img.shape[0], img.shape[1], len(self.classes)))
@@ -237,7 +229,7 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
 
         batch_x = np.array(batch_x, np.float32)
         batch_y = np.array(batch_y, np.float32)
-        # TEST
+
         if self.activation == 'softmax':
             # the class with higher value gets picked if several classes are present
             # the following coefs were handpicked

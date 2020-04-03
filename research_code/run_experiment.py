@@ -1,5 +1,11 @@
 import os
+import cv2
 
+import numpy as np
+import pandas as pd
+
+from tqdm import tqdm
+from typing import List
 from research_code.params import args
 from research_code.train import train
 from research_code.predict_masks import predict
@@ -26,7 +32,37 @@ def generate_ndwi():
     pass
 
 
+def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_names: List[str]):
+    background_class_path = os.path.join(test_dir, "labels", "background")
+    if os.path.exists(background_class_path):
+        print("Background class has been precomputed. Skipping background class computation")
+        return
+    else:
+        print("Precomputing background class ground truth")
+        os.makedirs(background_class_path)
+
+    for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
+        filename = row['name']
+        background_ground_truth = None
+        for class_idx, class_name in enumerate(class_names):
+            ground_truth_path = os.path.join(test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
+            ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
+            ground_truth = (ground_truth / 255)
+            if background_ground_truth is None:
+                background_ground_truth = np.zeros(ground_truth.shape)
+            background_ground_truth = np.logical_or(background_ground_truth, ground_truth)
+        background_ground_truth = np.logical_not(background_ground_truth).astype(np.uint8) * 255
+        cv2.imwrite(os.path.join(background_class_path, f"{filename.replace('jpg', 'png')}"), background_ground_truth)
+    print(f"Background class was saved into {background_class_path}")
+
+
 def run_experiment():
+    dataset_df = pd.read_csv(args.dataset_df)
+    classes = args.class_names
+    classes.pop('background')
+    precompute_background_class(args.train_dir, dataset_df[["ds_part"] == 'train'], classes)
+    precompute_background_class(args.val_dir, dataset_df[["ds_part"] == 'val'], classes)
+
     experiment_dir, model_dir, experiment_name = train()
     prediction_dir = os.path.join(experiment_dir, "predictions")
     best_model_name = find_best_model(model_dir)
