@@ -143,6 +143,9 @@ def train():
         callbacks=callbacks,
         max_queue_size=4,
         workers=2)
+    
+    del model
+    tf.keras.backend.clear_session()
     return experiment_dir, model_dir, args.exp_name
 
 
