@@ -87,7 +87,6 @@ def train():
         train_df['invalid'] = train_df['invalid'].fillna(False)
         train_df = train_df[~train_df['invalid']]
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
-
     print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
 
     train_generator = DataGeneratorSingleOutput(

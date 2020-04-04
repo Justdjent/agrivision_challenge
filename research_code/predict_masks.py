@@ -50,8 +50,8 @@ def get_new_shape(img_shape, max_shape=224):
     return new_shape
 
 
-def predict(experiments_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels, network):
-    output_dir = os.path.join(experiments_dir, "predictions")
+def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels, network):
+    output_dir = os.path.join(experiment_dir, "predictions")
     os.makedirs(output_dir, exist_ok=True)
     # if args.stacked_channels != 0:
     warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
@@ -84,7 +84,7 @@ def predict(experiments_dir, class_names, weights_path, test_df_path, test_data_
 if __name__ == '__main__':
     setup_env()
     
-    predict(experiments_dir=args.experiments_dir,
+    predict(experiment_dir=args.experiments_dir,
             class_names=args.class_names,
             weights_path=args.weights,
             test_df_path=args.dataset_df,

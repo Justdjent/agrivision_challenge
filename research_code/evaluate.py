@@ -98,7 +98,7 @@ def plot_confusion_matrix(confusion_matrix, class_names, x_title, pred_dir, outp
 
 
 
-def evaluate(test_dir: str, experiments_dir: str, test_df_path: str, threshold: float,
+def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: float,
              class_names: List[str]):
     """
     Creates dataframe and tfrecords file for results visualization
@@ -110,7 +110,7 @@ def evaluate(test_dir: str, experiments_dir: str, test_df_path: str, threshold: 
     :param class_names: Array of class names
     :return:
     """
-    prediction_dir = os.path.join(experiments_dir, "predictions")
+    prediction_dir = os.path.join(experiment_dir, "predictions")
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
     class_names = class_names + ['background']
@@ -159,7 +159,7 @@ def evaluate(test_dir: str, experiments_dir: str, test_df_path: str, threshold: 
     x_title = f"Mean IoU - {mean_iou}\n{class_ious}"
     class_ious["mean_iou"] = mean_iou
     print(x_title)
-    output_filename = os.path.basename(experiments_dir)
+    output_filename = os.path.basename(experiment_dir)
     output_csv = output_filename + ".csv"
     plot_confusion_matrix(confusion_matrix, class_names, x_title, prediction_dir, output_filename)
     with open(os.path.join(prediction_dir, f"{output_filename}_mean_ious.json"), 'w') as f:
