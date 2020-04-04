@@ -50,11 +50,15 @@ def get_new_shape(img_shape, max_shape=224):
     return new_shape
 
 
-def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels, network):
+def predict(experiments_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels, network):
+    output_dir = os.path.join(experiments_dir, "predictions")
     os.makedirs(output_dir, exist_ok=True)
-    if args.stacked_channels != 0:
-        warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
-    model = make_model((None, None, 3 + stacked_channels), network)
+    # if args.stacked_channels != 0:
+    warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
+    model = make_model((None, None, args.stacked_channels + 3),
+                    network=args.network,
+                    channels=len(args.class_names),
+                    activation=args.activation)
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
@@ -66,9 +70,9 @@ def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, 
         x = np.expand_dims(img, axis=0)
         x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
         preds = model.predict(x)
-
-        for num, pred in enumerate(preds):
-            bin_mask = (pred[0, :, :, 0] * 255).astype(np.uint8)
+        #print(preds.shape)
+        for num in range(len(class_names)):
+            bin_mask = (preds[0, :, :, num] * 255).astype(np.uint8)
             cur_class = class_names[num]
             filename = row['name']
             save_folder_masks = os.path.join(output_dir, cur_class)
@@ -79,10 +83,11 @@ def predict(output_dir, class_names, weights_path, test_df_path, test_data_dir, 
 
 if __name__ == '__main__':
     setup_env()
-    predict(output_dir=args.pred_mask_dir,
+    
+    predict(experiments_dir=args.experiments_dir,
             class_names=args.class_names,
             weights_path=args.weights,
-            test_df_path=args.test_df,
-            test_data_dir=args.test_data_dir,
+            test_df_path=args.dataset_df,
+            test_data_dir=args.val_dir,
             stacked_channels=args.stacked_channels,
             network=args.network)

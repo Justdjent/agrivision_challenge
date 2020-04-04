@@ -72,7 +72,7 @@ def run_experiment():
     test_df_path = args.dataset_df
     test_data_dir = args.val_dir
     print(f"Starting prediction process. Using {best_model_name} for prediction")
-    predict(output_dir=prediction_dir,
+    predict(experiment_dir=experiment_dir,
             class_names=args.class_names,
             weights_path=weights_path,
             test_df_path=test_df_path,
@@ -81,8 +81,7 @@ def run_experiment():
             network=args.network)
     print(f"Starting evaluation process of results in {prediction_dir}")
     evaluate(test_dir=test_data_dir,
-             prediction_dir=prediction_dir,
-             output_csv=f"{experiment_name}_img_ious.csv",
+             experiment_dir=experiment_dir,
              test_df_path=test_df_path,
              threshold=args.threshold,
              class_names=args.class_names)
