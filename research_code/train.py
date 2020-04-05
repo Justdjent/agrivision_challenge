@@ -1,39 +1,62 @@
 import os
-os.environ['LD_LIBRARY_PATH'] = '/usr/local/cuda-10.0/extras/CUPTI/lib64'
-import pandas as pd
-from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
-from tensorflow.keras.optimizers import Adam
 
-# from CyclicLearningRate import CyclicLR
-from research_code.datasets_tf2 import DataGenerator_angles #build_batch_generator, generate_filenames, build_batch_generator_angle
-from research_code.losses import make_loss, dice_coef_clipped, dice_coef, dice_coef_border, mse_masked, angle_rmse
+import pandas as pd
+import tensorflow as tf
+
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
+from tensorflow.keras.optimizers import Adam
+from research_code.data_generator import DataGeneratorSingleOutput
+from research_code.losses import make_loss, dice_coef
 from research_code.models import make_model
 from research_code.params import args
-from research_code.utils import freeze_model, ThreadsafeIter
-
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-
-import tensorflow as tf
-from keras.backend.tensorflow_backend import set_session
+from research_code.utils import freeze_model
 
 
-def main():
-    man_dir = args.manual_dataset_dir
+def setup_env():
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+                logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
+
+
+def train():
+    if args.exp_name is None:
+        raise ValueError("Please add a name for your experiment - exp_name argument")
+    setup_env()
+    train_dir = args.train_dir
+    val_dir = args.val_dir
 
     if args.net_alias is not None:
         formatted_net_alias = '-{}-'.format(args.net_alias)
-
-    best_model_file =\
-        '{}/{}{}loss-{}-fold_{}-{}{:.6f}-{}'.format(args.models_dir, args.network,
-                                                    formatted_net_alias, args.loss_function,
-                                                    args.fold, args.input_width,
-                                                    args.learning_rate, args.r_type) +\
+    experiment_dir = os.path.join(args.experiments_dir, args.exp_name)
+    model_dir = os.path.join(experiment_dir, args.models_dir)
+    log_dir = os.path.join(experiment_dir, args.log_dir)
+    if os.path.exists(log_dir) and len(os.listdir(log_dir)) > 0:
+        raise ValueError("Please check if this experiment was already run (logs aren't empty)")
+    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(log_dir, exist_ok=True)
+    best_model_file = \
+        '{}/{}{}loss-{}-{}{:.6f}'.format(model_dir, args.network,
+                                         formatted_net_alias, args.loss_function, args.crop_width,
+                                         args.learning_rate) + \
         '-{epoch:d}-{val_loss:0.7f}.h5'
+
     ch = 5
-    # model = make_model((args.input_width, args.input_height, args.stacked_channels + ch))
-    model = make_model((None, None, args.stacked_channels + ch))
+
+    activation = args.activation
+    model = make_model((None, None, args.stacked_channels + ch),
+                       network=args.network,
+                       channels=len(args.class_names),
+                       activation=activation)
+
     freeze_model(model, args.freeze_till_layer)
-    # class_names = ['cloud_shadow', 'double_plant', 'planter_skip', 'standing_water', 'waterway', 'weed_cluster']
     if args.weights is None:
         print('No weights passed, training from scratch')
     else:
@@ -44,15 +67,9 @@ def main():
 
     if args.show_summary:
         model.summary()
-    num_classes = len(args.class_names)
-    loss_list = [make_loss('bce_dice') for i in range(num_classes)]
-    metrics_list = [dice_coef for i in range(num_classes)]
-    class_weights = {"weed_cluster":0.5,
-                     "standing_water":4.46,
-                     "double_plant":10.39,
-                     "waterway":5.82,
-                     "cloud_shadow":2.32,
-                     "planter_skip":10}
+
+    loss_list = [make_loss('bce_dice')]
+    metrics_list = [dice_coef]
     model.compile(loss=loss_list,
                   optimizer=optimizer,
                   # loss_weights=class_weights,
@@ -61,59 +78,58 @@ def main():
     crop_size = None
 
     if args.use_crop:
-        crop_size = (args.input_height, args.input_width)
-        print('Using crops of shape ({}, {})'.format(args.input_height, args.input_width))
+        crop_size = (args.crop_height, args.crop_width)
+        print('Using crops of shape ({}, {})'.format(args.crop_height, args.crop_width))
     else:
         print('Using full size images, --use_crop=True to do crops')
+    dataset_df = pd.read_csv(args.dataset_df)
 
-    train_df = pd.read_csv(args.train_df)
-    val_df = pd.read_csv(args.val_df)
+    train_df = dataset_df[dataset_df["ds_part"] == "train"]
+    if args.exclude_bad_labels_df:
+        invalid_df = pd.read_csv(args.exclude_bad_labels_df)
+        train_df = pd.merge(train_df, invalid_df, on='name', how='outer')
+        train_df['invalid'] = train_df['invalid'].fillna(False)
+        train_df = train_df[~train_df['invalid']]
+    val_df = dataset_df[dataset_df["ds_part"] == "val"]
+    print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
 
-    print('Training fold #{}, {} in train_ids, {} in val_ids'.format(args.fold, len(train_df), len(val_df)))
-
-    train_generator = DataGenerator_angles(
+    train_generator = DataGeneratorSingleOutput(
         train_df,
         classes=args.class_names,
-        img_dir=man_dir,
+        img_dir=train_dir,
         batch_size=args.batch_size,
         shuffle=True,
-        out_size=(args.out_height, args.out_width),
+        reshape_size=(args.reshape_height, args.reshape_width),
         crop_size=crop_size,
-        # mask_dir=mask_dir,
-        aug=False
+        do_aug=args.use_aug,
+        validate_pixels=True,
+        activation=activation
     )
 
-    val_generator = DataGenerator_angles(
+    val_generator = DataGeneratorSingleOutput(
         val_df,
         classes=args.class_names,
-        img_dir=man_dir,
+        img_dir=val_dir,
         batch_size=args.batch_size,
         shuffle=True,
-        out_size=(args.out_height, args.out_width),
+        reshape_size=(args.reshape_height, args.reshape_width),
         crop_size=crop_size,
-        # mask_dir=mask_dir,
-        aug=False
+        do_aug=False,
+        validate_pixels=True,
+        activation=activation
     )
 
     best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
-                                                  verbose=1,
-                                                  save_best_only=True,
-                                                  save_weights_only=True,
-                                                  mode='min')
+                                 verbose=1,
+                                 save_best_only=True,
+                                 save_weights_only=True,
+                                 mode='min')
 
     callbacks = [best_model,
-                 EarlyStopping(patience=45, verbose=10),
-                 TensorBoard(log_dir=os.path.join('./logs', args.exp_name), histogram_freq=0, write_graph=True, write_images=True)]
-                 # ReduceLROnPlateau(monitor='val_dice_coef', mode='max', factor=0.2, patience=5, min_lr=0.00001,
-                 #                  verbose=1)]
-    if args.clr is not None:
-        clr_params = args.clr.split(',')
-        base_lr = float(clr_params[0])
-        max_lr = float(clr_params[1])
-        step = int(clr_params[2])
-        mode = clr_params[3]
-        clr = CyclicLR(base_lr=base_lr, max_lr=max_lr, step_size=step, mode=mode)
-        callbacks.append(clr)
+                 EarlyStopping(patience=10, verbose=10),
+                 TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True,
+                             write_images=True)]
+
     model.fit_generator(
         generator=train_generator,
         steps_per_epoch=len(train_df) / args.batch_size + 1,
@@ -121,9 +137,13 @@ def main():
         validation_data=val_generator,
         validation_steps=len(val_df) / args.batch_size + 1,
         callbacks=callbacks,
-        max_queue_size=50,
-        workers=4)
+        max_queue_size=4,
+        workers=2)
+
+    del model
+    tf.keras.backend.clear_session()
+    return experiment_dir, model_dir, args.exp_name
 
 
 if __name__ == '__main__':
-    main()
+    train()

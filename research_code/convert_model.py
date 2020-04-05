@@ -1,5 +1,5 @@
-from models import make_model
-from params import args
+from research_code.models import make_model
+from research_code.params import args
 from tqdm import tqdm
 tqdm.monitor_interval = 0
 
