@@ -107,6 +107,8 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         mask_path = os.path.join(self.img_dir, "masks", name.replace(".jpg", ".png"))
         if os.path.exists(mask_path):
             mask_img = cv2.imread(mask_path)
+            mask_img = mask_img > 0
+            mask_img = mask_img.astype(np.float32)
         else:
             mask_img = np.ones(border_img.shape)
 
