@@ -50,5 +50,6 @@ arg('--exp_name')
 arg('--coord_conv', type=bool, default=False)
 arg('--use_aug', action='store_true')
 arg('--activation', default='sigmoid', choices=['sigmoid', 'softmax'])
+arg('--add_classification_head', action='store_true')
 
 args = parser.parse_args()

@@ -52,7 +52,8 @@ def train():
     model = make_model((None, None, args.stacked_channels + ch),
                        network=args.network,
                        channels=len(args.class_names),
-                       activation=activation)
+                       activation=activation,
+                       add_classification_head=args.add_classification_head)
 
     freeze_model(model, args.freeze_till_layer)
     if args.weights is None:

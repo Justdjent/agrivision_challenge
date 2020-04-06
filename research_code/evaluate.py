@@ -103,7 +103,6 @@ def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: f
     Creates dataframe and tfrecords file for results visualization
     :param test_dir: Directory with images, boundaries, masks and ground truth of the test
     :param experiment_dir: Predicted masks dir
-    :param output_csv: Name for output_csv
     :param test_df_path: Path to dataframe with data about test
     :param threshold: Threshold for predictions
     :param class_names: Array of class names

@@ -78,7 +78,8 @@ def run_experiment():
             test_df_path=test_df_path,
             test_data_dir=test_data_dir,
             stacked_channels=args.stacked_channels,
-            network=args.network)
+            network=args.network,
+            add_classification_head=args.add_classification_head)
     print(f"Starting evaluation process of results in {prediction_dir}")
     evaluate(test_dir=test_data_dir,
              experiment_dir=experiment_dir,
