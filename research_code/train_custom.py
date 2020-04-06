@@ -104,7 +104,7 @@ class TrainLoop:
             pbar.close()
             
             # Validation
-            pbar = tqdm(total=len(train_dataset), desc=f"Valid | Epoch {epoch}/{epochs}")
+            pbar = tqdm(total=len(val_dataset), desc=f"Valid | Epoch {epoch}/{epochs}")
             # FIXME: technically, a 0 here is incorrect,
             # but in 10k+ results one zero doesn't matter that much
             mean_conf = np.full((len(CLASSES), len(CLASSES)), np.nan)
