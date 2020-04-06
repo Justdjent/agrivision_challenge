@@ -272,7 +272,6 @@ class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
         'Generates data containing batch_size samples'
         batch_x, batch_y = super()._data_generation(list_IDs_temp)
         classes = np.array(np.count_nonzero(batch_y, axis=(1, 2)) != 0, dtype=np.float32)
-        print(classes)
         if 'background' in self.classes:
             classes = classes[:, :-1]
         return batch_x, [batch_y, classes]
