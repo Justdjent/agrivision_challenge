@@ -68,12 +68,13 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
 
     output_dir = os.path.join(experiment_dir, "predictions")
     os.makedirs(output_dir, exist_ok=True)
-    warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
+    warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 71)
     model = make_model((None, None, stacked_channels + 3),
                        network=network,
                        channels=len(args.class_names),
                        activation=args.activation,
-                       add_classification_head=add_classification_head)
+                       add_classification_head=args.add_classification_head,
+                       classes=args.class_names)
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']

@@ -103,19 +103,12 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         border_path = os.path.join(
             self.img_dir, "boundaries", name.replace(".jpg", ".png")
         )
-        border_img = cv2.imread(border_path)
-        mask_path = os.path.join(self.img_dir, "masks", name.replace(".jpg", ".png"))
-        if os.path.exists(mask_path):
-            mask_img = cv2.imread(mask_path)
-            mask_img = mask_img > 0
-            mask_img = mask_img.astype(np.float32)
-        else:
-            mask_img = np.ones(border_img.shape)
-
-        mask_img = mask_img * border_img
-        mask_img = mask_img > 0
-        mask_img = np.invert(mask_img)
-        return mask_img
+        border_img = cv2.imread(border_path, cv2.IMREAD_GRAYSCALE)
+        try:
+            border_img = border_img > 0
+        except Exception as error:
+            print(border_path)
+        return border_img
 
     def _data_generation(self, batch_data):
         """Generates data containing batch_size samples 
@@ -209,14 +202,14 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             if self.validate_pixels:
                 not_valid_mask = self.read_masks_borders(item_data['name'])
             else:
-                not_valid_mask = np.zeros(img.shape, dtype=np.bool)
+                not_valid_mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.bool)
             img[not_valid_mask] = 0
 
             targets = np.zeros((img.shape[0], img.shape[1], len(self.classes)))
             for idx, cls in enumerate(self.classes):
                 mask_path = os.path.join(self.img_dir, 'labels', cls, item_data['name'])
                 mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
-                mask[not_valid_mask[:, :, 0]] = 0
+                mask[not_valid_mask] = 0
                 mask = mask > 0
                 targets[:, :, idx] = mask
 
