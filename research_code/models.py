@@ -924,22 +924,25 @@ def get_traj_conv_lstm(img_input_shape, point_input_shape):
     return model
 
 
-def add_classification_head(segmentation_model, encoder_output_name, channels, activation):
+def add_classification_head(segmentation_model, encoder_output_name, channels):
     encoder_output = segmentation_model.get_layer(encoder_output_name).output
     x = GlobalAveragePooling2D(name="avg_pool_classification_head")(encoder_output)
-    classes = Dense(channels, activation=activation, name='classes_prediction')(x)
+    classes = Dense(channels, activation='sigmoid', name='classes_prediction')(x)
     final_model = Model(inputs=[segmentation_model.input], outputs=[segmentation_model.output, classes])
     return final_model
 
 
 def make_model(input_shape, network, **kwargs):
-    if "add_classification_head" in kwargs.keys() and kwargs["add_classification_head"]:
-        kwargs.pop("add_classification_head")
+    if kwargs["add_classification_head"]:
+        kwargs["add_classification_head"] = False
         segmentation_model = make_model(input_shape, network, **kwargs)
         # currently supports only resnet50 architecture
         segmentation_model_with_cls_head = add_classification_head(segmentation_model,
-                                                                   encoder_output_name="activation_48", **kwargs)
+                                                                   encoder_output_name="activation_48",
+                                                                   channels=kwargs["channels"])
         return segmentation_model_with_cls_head
+    else:
+        kwargs.pop("add_classification_head")
     if network == 'resnet50':
         return get_unet_resnet(input_shape)
     elif network == 'csse_resnet50':
