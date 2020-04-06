@@ -1,17 +1,19 @@
 import os
 import cv2
 import json
+import matplotlib
 
+matplotlib.use('Agg')
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sn
 import tensorflow as tf
-import matplotlib.pyplot as plt
 
 from tqdm import tqdm
+from typing import List
 from research_code.params import args
-
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 
 def dice_coef(y_true, y_pred, smooth=1.0):
@@ -95,7 +97,32 @@ def plot_confusion_matrix(confusion_matrix, class_names, x_title, pred_dir, outp
     heat_map.figure.savefig(os.path.join(pred_dir, f"{output_filename}_conf_matrix.png"))
 
 
-def evaluate(test_dir, prediction_dir, output_csv, test_df_path, threshold, class_names):
+def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_names: List[str]):
+    background_class_path = os.path.join(test_dir, "labels", "background")
+    if os.path.exists(background_class_path):
+        print("Background class has been precomputed. Skipping background class computation")
+        return
+    else:
+        print("Precomputing background class ground truth")
+        os.makedirs(background_class_path)
+
+    for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
+        filename = row['name']
+        background_ground_truth = None
+        for class_idx, class_name in enumerate(class_names):
+            ground_truth_path = os.path.join(test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
+            ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
+            ground_truth = (ground_truth / 255)
+            if background_ground_truth is None:
+                background_ground_truth = np.zeros(ground_truth.shape)
+            background_ground_truth = np.logical_or(background_ground_truth, ground_truth)
+        background_ground_truth = np.logical_not(background_ground_truth).astype(np.uint8) * 255
+        cv2.imwrite(os.path.join(background_class_path, f"{filename.replace('jpg', 'png')}"), background_ground_truth)
+    print(f"Background class was saved into {background_class_path}")
+
+
+def evaluate(test_dir: str, prediction_dir: str, output_csv: str, test_df_path: str, threshold: float,
+             class_names: List[str]):
     """
     Creates dataframe and tfrecords file for results visualization
     :param test_dir: Directory with images, boundaries, masks and ground truth of the test
@@ -104,17 +131,14 @@ def evaluate(test_dir, prediction_dir, output_csv, test_df_path, threshold, clas
     :param test_df_path: Path to dataframe with data about test
     :param threshold: Threshold for predictions
     :param class_names: Array of class names
-    :param background_is_class: Name of activation function - currently supported 'sigmoid' and 'softmax'
     :return:
     """
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
-    if 'background' in class_names:
-        df = pd.DataFrame(columns=class_names + ['name'])
-        num_classes = len(class_names)
-    else:
-        df = pd.DataFrame(columns=class_names + ['background', 'name'])
-        num_classes = len(class_names) + 1
+    class_names = class_names + ['background']
+    df = pd.DataFrame(columns=class_names + ['name'])
+    num_classes = len(class_names)
+    precompute_background_class(test_dir, test_df, class_names[:-1])
     confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.uint64)
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
         filename = row['name']
@@ -126,42 +150,34 @@ def evaluate(test_dir, prediction_dir, output_csv, test_df_path, threshold, clas
         else:
             invalid_pixels_mask = np.ones(boundary.shape)
         valid_pixels_mask = np.logical_and(boundary, invalid_pixels_mask).astype(np.uint8)
-        # since there is no background class at the moment it should be calculated based on other classes
-        if 'background' not in class_names:
-            background_prediction = np.zeros(boundary.shape)
-            background_ground_truth = np.zeros(boundary.shape)
+
+        background_prediction = np.zeros(boundary.shape)
         ground_truths = []
         predictions = []
         for class_idx, class_name in enumerate(class_names):
             ground_truth_path = os.path.join(test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
-            prediction_path = os.path.join(prediction_dir, class_name, filename)
             ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
-            prediction = cv2.imread(prediction_path, cv2.IMREAD_GRAYSCALE)
             ground_truth = (ground_truth / 255)
-            prediction = (prediction / 255)
-            if 'background' not in class_names:
+            if class_name == 'background':
+                prediction = np.logical_not(background_prediction)
+            else:
+                prediction_path = os.path.join(prediction_dir, class_name, filename)
+                prediction = cv2.imread(prediction_path, cv2.IMREAD_GRAYSCALE)
+                prediction = (prediction / 255)
                 prediction[prediction < threshold] = 0
                 background_prediction = np.logical_or(background_prediction, prediction)
-                background_ground_truth = np.logical_or(background_ground_truth, ground_truth)
             ground_truths.append(ground_truth)
             predictions.append(prediction)
-        if 'background' not in class_names:
-            background_ground_truth = np.logical_not(background_ground_truth)
-            background_prediction = np.logical_not(background_prediction)
-            ground_truths.append(background_ground_truth)
-            predictions.append(background_prediction)
-        predictions = np.moveaxis(np.array(predictions) * valid_pixels_mask, 0, -1)
+
         ground_truths = np.moveaxis(np.array(ground_truths) * valid_pixels_mask, 0, -1)
+        predictions = np.moveaxis(np.array(predictions) * valid_pixels_mask, 0, -1)
+
         img_confusion_matrix = compute_confusion_matrix(predictions, ground_truths, num_classes)
         confusion_matrix += img_confusion_matrix
-        if 'background' not in class_names:
-            _, img_ious = m_iou(img_confusion_matrix, class_names + ['background'])
-        else:
-            _, img_ious = m_iou(img_confusion_matrix, class_names)
+        _, img_ious = m_iou(img_confusion_matrix, class_names)
         img_ious["name"] = filename
         df = df.append(img_ious, ignore_index=True)
-    if 'background' not in class_names:
-        class_names.append('background')
+
     mean_iou, class_ious = m_iou(confusion_matrix, class_names)
     x_title = f"Mean IoU - {mean_iou}\n{class_ious}"
     class_ious["mean_iou"] = mean_iou

@@ -291,8 +291,8 @@ class DataGenerator_angles(tf.keras.utils.Sequence):
             for cls in self.classes:
                 mask_path = os.path.join(self.img_dir, 'labels', cls, filename['name'])
                 mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
+                mask[not_valid_mask[:,:,0]] = 0
                 mask = mask > 0
-                mask = mask[not_valid_mask[:,:,0]]
                 # print(mask.shape)
                 class_labels[cls].append(mask)
 
@@ -301,10 +301,7 @@ class DataGenerator_angles(tf.keras.utils.Sequence):
         batch_x = np.array(batch_x, np.float32)
         for cls in self.classes:
             class_labels[cls] = np.expand_dims(np.array(class_labels[cls], np.float32), axis=-1)
-        #     masks = np.array(masks, np.float32)
-        # line_masks = np.array(line_masks, np.float32)
-        # line_masks = np.expand_dims(line_masks, axis=-1)
-        # mask_pred_angles(self, batch_x, masks, aug=False)
+
         batch_x, masks = self.mask_function.mask_pred_angles(
             batch_x,
             class_labels,
