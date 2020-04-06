@@ -9,6 +9,7 @@ from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.layers import MaxPooling2D
 import tensorflow.keras.backend as KB
 import tensorflow as tf
+from tensorflow_addons.layers import CorrelationCost
 
 from research_code.resnet50_fixed import ResNet50, ResNet50_multi
 from research_code.params import args
@@ -590,24 +591,51 @@ def get_instance_unet(input_shape, channels=1, activation="sigmoid"):
     return model
 
 
-def get_instance_unet_connect(input_shape):
+def get_instance_unet_correlation(input_shape, channels=1, activation="sigmoid"):
+    max_distance = 240
     img_input = Input(input_shape)
+    corr1 = CorrelationCost(pad=max_distance,
+                            kernel_size=1,
+                            max_displacement=max_distance,
+                            stride_1=1,
+                            stride_2=2,
+                            data_format="channels_last")([img_input, img_input])
+    corr1 = np.concatenate([img_input, corr1], axis=-1)
     conv1 = conv_block_simple(img_input, 32, "conv1_1")
     conv1 = conv_block_simple(conv1, 32, "conv1_2")
     pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
 
+
     conv2 = conv_block_simple(pool1, 64, "conv2_1")
     conv2 = conv_block_simple(conv2, 64, "conv2_2")
     pool2 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool2")(conv2)
+    #corr2 = CorrelationCost(pad=max_distance//2,
+    #                        kernel_size=1,
+    #                        max_displacement=max_distance//2,
+    #                        stride_1=1,
+    #                        stride_2=2,
+    #                        data_format="channels_last")([conv2, conv2])
 
     conv3 = conv_block_simple(pool2, 128, "conv3_1")
     conv3 = conv_block_simple(conv3, 128, "conv3_2")
     pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
+    #corr3 = CorrelationCost(pad=max_distance//4,
+    #                        kernel_size=1,
+    #                        max_displacement=max_distance//4,
+    #                        stride_1=1,
+    #                        stride_2=2,
+    #                        data_format="channels_last")([conv3, conv3])
 
     conv4 = conv_block_simple(pool3, 256, "conv4_1")
     conv4 = conv_block_simple(conv4, 256, "conv4_2")
     conv4 = conv_block_simple(conv4, 256, "conv4_3")
-
+    #corr4 = CorrelationCost(pad=max_distance,
+    #                        kernel_size=1,
+    #                        max_displacement=max_distance,
+    #                        stride_1=1,
+    #                       stride_2=2,
+    #                        data_format="channels_last")([conv4, conv4])
+    # conv4 = concatenate([conv4, corr4], axis=-1)
     up5 = concatenate([UpSampling2D()(conv4), conv3], axis=-1)
     conv5 = conv_block_simple(up5, 128, "conv5_1")
     conv5 = conv_block_simple(conv5, 128, "conv5_2")
@@ -621,88 +649,9 @@ def get_instance_unet_connect(input_shape):
     conv7 = conv_block_simple(conv7, 32, "conv7_2")
 
     conv7 = SpatialDropout2D(0.2)(conv7)
-    semantic = Conv2D(1, (1, 1), activation="sigmoid", name="line_tree")(conv7)
-    # conv8 = Conv2D(10, (1, 1), activation="relu", name="classifier")(conv7)
-    instance = Conv2D(1, (1, 1), activation="sigmoid", name="line_gap")(conv7)
-    connected = Conv2D(1, (1, 1), activation="sigmoid", name="connected")(conv7)
-    model = Model(img_input, [semantic, instance, connected])
-    return model
 
-
-def get_instance_unet_3(input_shape):
-    img_input = Input(input_shape)
-    conv1 = conv_block_simple(img_input, 32, "conv1_1")
-    conv1 = conv_block_simple(conv1, 32, "conv1_2")
-    pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
-
-    conv2 = conv_block_simple(pool1, 64, "conv2_1")
-    conv2 = conv_block_simple(conv2, 64, "conv2_2")
-    pool2 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool2")(conv2)
-
-    conv3 = conv_block_simple(pool2, 128, "conv3_1")
-    conv3 = conv_block_simple(conv3, 128, "conv3_2")
-    pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
-
-    conv4 = conv_block_simple(pool3, 256, "conv4_1")
-    conv4 = conv_block_simple(conv4, 256, "conv4_2")
-    conv4 = conv_block_simple(conv4, 256, "conv4_3")
-
-    up5 = concatenate([UpSampling2D()(conv4), conv3], axis=-1)
-    conv5 = conv_block_simple(up5, 128, "conv5_1")
-    conv5 = conv_block_simple(conv5, 128, "conv5_2")
-
-    up6 = concatenate([UpSampling2D()(conv5), conv2], axis=-1)
-    conv6 = conv_block_simple(up6, 64, "conv6_1")
-    conv6 = conv_block_simple(conv6, 64, "conv6_2")
-
-    up7 = concatenate([UpSampling2D()(conv6), conv1], axis=-1)
-    conv7 = conv_block_simple(up7, 32, "conv7_1")
-    conv7 = conv_block_simple(conv7, 32, "conv7_2")
-
-    conv7 = SpatialDropout2D(0.2)(conv7)
-    semantic = Conv2D(1, (1, 1), activation="sigmoid", name="semantic")(conv7)
-    # conv8 = Conv2D(10, (1, 1), activation="relu", name="classifier")(conv7)
-    instance = Conv2D(1, (1, 1), activation="sigmoid", name="instance")(conv7)
-    border = Conv2D(1, (1, 1), activation="sigmoid", name="border")(conv7)
-    model = Model(img_input, [semantic, instance, border])
-    return model
-
-
-def get_instance_unet_dilated(input_shape):
-    img_input = Input(input_shape)
-    conv1 = conv_block_simple(img_input, 32, "conv1_1")
-    conv1 = conv_block_simple(conv1, 32, "conv1_2")
-    pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
-
-    conv2 = conv_block_simple(pool1, 64, "conv2_1")
-    conv2 = conv_block_simple(conv2, 64, "conv2_2")
-    pool2 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool2")(conv2)
-
-    conv3 = conv_block_simple(pool2, 128, "conv3_1")
-    conv3 = conv_block_simple(conv3, 128, "conv3_2")
-    pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
-
-    conv4 = conv_block_dilated(pool3, 256, "conv4_1")
-    conv4 = conv_block_dilated(conv4, 256, "conv4_2")
-    conv4 = conv_block_dilated(conv4, 256, "conv4_3")
-
-    up5 = concatenate([UpSampling2D()(conv4), conv3], axis=-1)
-    conv5 = conv_block_simple(up5, 128, "conv5_1")
-    conv5 = conv_block_simple(conv5, 128, "conv5_2")
-
-    up6 = concatenate([UpSampling2D()(conv5), conv2], axis=-1)
-    conv6 = conv_block_simple(up6, 64, "conv6_1")
-    conv6 = conv_block_simple(conv6, 64, "conv6_2")
-
-    up7 = concatenate([UpSampling2D()(conv6), conv1], axis=-1)
-    conv7 = conv_block_simple(up7, 32, "conv7_1")
-    conv7 = conv_block_simple(conv7, 32, "conv7_2")
-
-    conv7 = SpatialDropout2D(0.2)(conv7)
-    semantic = Conv2D(1, (1, 1), activation="sigmoid", name="semantic")(conv7)
-    # conv8 = Conv2D(10, (1, 1), activation="relu", name="classifier")(conv7)
-    instance = Conv2D(1, (1, 1), activation="sigmoid", name="instance")(conv7)
-    model = Model(img_input, [semantic, instance])
+    output = Conv2D(channels, (1, 1), activation=activation, name="mask")(conv7)
+    model = Model(img_input, output)
     return model
 
 
@@ -749,180 +698,6 @@ def get_csse_unet(input_shape):
     return model
 
 
-def get_anglenet_unet(input_shape, num_angles=180):
-    img_input = Input(input_shape)
-    conv1 = conv_block_simple(img_input, 32, "conv1_1")
-    conv1 = conv_block_simple(conv1, 32, "conv1_2")
-    pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
-
-    conv2 = conv_block_simple(pool1, 64, "conv2_1")
-    conv2 = conv_block_simple(conv2, 64, "conv2_2")
-    pool2 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool2")(conv2)
-
-    conv3 = conv_block_simple(pool2, 128, "conv3_1")
-    conv3 = conv_block_simple(conv3, 128, "conv3_2")
-    pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
-
-    conv4 = conv_block_simple(pool3, 256, "conv4_1")
-    conv4 = conv_block_simple(conv4, 256, "conv4_2")
-    conv4 = conv_block_simple(conv4, 256, "conv4_3")
-
-    up5 = concatenate([UpSampling2D()(conv4), conv3], axis=-1)
-    conv5 = conv_block_simple(up5, 128, "conv5_1")
-    conv5 = conv_block_simple(conv5, 128, "conv5_2")
-
-    up6 = concatenate([UpSampling2D()(conv5), conv2], axis=-1)
-    conv6 = conv_block_simple(up6, 64, "conv6_1")
-    conv6 = conv_block_simple(conv6, 64, "conv6_2")
-
-    up7 = concatenate([UpSampling2D()(conv6), conv1], axis=-1)
-    conv7 = conv_block_simple(up7, 32, "conv7_1")
-    conv7 = conv_block_simple(conv7, 32, "conv7_2")
-
-    conv7 = SpatialDropout2D(0.2)(conv7)
-    conv8 = Conv2D(num_angles, (1, 1), activation=None, name="conv")(conv7)
-    prediction = tf.nn.softmax(conv8, axis=-1, name="prediction_anglenet")
-    # prediction = Conv2D(num_angles, (1, 1), activation="sigmoid", name="prediction")(conv7)
-    model = Model(img_input, prediction)
-    return model
-
-
-def angle_net_head(input_layer, grid_size, num_angles):
-    x = conv_block_simple(input_layer, 256, 'descr_conv1_anglenet')
-    x = conv_block_simple(x, num_angles, 'descr_conv2_anglenet', kernel_size=1, activation=None)
-
-    # with tf.device('/cpu:0'):  # op not supported on GPU yet
-    desc = Lambda(lambda image: tf.image.resize(x,
-                                                tuple(grid_size * np.array(x.shape[1:3])),
-                                                method='bicubic'))(x)
-    prediction = tf.nn.softmax(desc, axis=-1, name="prediction_anglenet")
-    return prediction
-
-
-def get_angle_net(input_shape, grid_size=8, num_angles=180):
-    img_input = Input(input_shape)
-    conv1 = conv_block_simple(img_input, 64, "conv1_1")
-    conv1 = conv_block_simple(conv1, 64, "conv1_2")
-    pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
-
-    conv2 = conv_block_simple(pool1, 64, "conv2_1")
-    conv2 = conv_block_simple(conv2, 64, "conv2_2")
-    pool2 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool2")(conv2)
-
-    conv3 = conv_block_simple(pool2, 128, "conv3_1")
-    conv3 = conv_block_simple(conv3, 128, "conv3_2")
-    pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
-
-    conv4 = conv_block_simple(pool3, 128, "conv4_1")
-    conv4 = conv_block_simple(conv4, 128, "conv4_2")
-
-    angles = angle_net_head(conv4, grid_size, num_angles)
-    model = Model(img_input, angles)
-    return model
-
-
-def lstm_encoder(img_input):
-    conv1 = conv_block_simple(img_input, 64, "conv1_1")
-    conv1 = conv_block_simple(conv1, 64, "conv1_2")
-    pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
-
-    conv2 = conv_block_simple(pool1, 128, "conv2_1")
-    conv2 = conv_block_simple(conv2, 128, "conv2_2")
-    pool2 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool2")(conv2)
-
-    up_2 = UpSampling2D()(conv2)
-    conv_up_2 = conv_block_simple(up_2, 64, "conv_up2")
-
-    conv3 = conv_block_simple(pool2, 256, "conv3_1")
-    conv3 = conv_block_simple(conv3, 256, "conv3_2")
-    up_3 = UpSampling2D(size=(4, 4))(conv3)
-    conv_up_3 = conv_block_simple(up_3, 64, "conv_up3")
-    pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
-
-    conv4 = conv_block_simple(pool3, 512, "conv4_1")
-    conv4 = conv_block_simple(conv4, 512, "conv4_2")
-    up_4 = UpSampling2D(size=(8, 8))(conv4)
-    conv_up_4 = conv_block_simple(up_4, 64, "conv_up4")
-    features = concatenate([conv1, conv_up_2, conv_up_3, conv_up_4], axis=-1)
-
-    conv5 = conv_block_simple(features, 128, "conv5_2")
-    pool5 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool4")(conv5)
-
-    conv6 = conv_block_simple(pool5, 128, "conv6_2")
-    pool6 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool5")(conv6)
-
-    conv7 = conv_block_simple(pool6, 128, "conv7_2")
-    pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool6")(conv7)
-    return pool3
-
-
-def lstm_resnet_encoder(img_input):
-    resnet_base = ResNet50(input_tensor=img_input, include_top=False)
-
-    # if args.show_summary:
-    #     resnet_base.summary()
-
-    for l in resnet_base.layers:
-        l.trainable = False
-
-    conv1 = resnet_base.get_layer("activation").output
-    conv2 = resnet_base.get_layer("activation_9").output
-    conv3 = resnet_base.get_layer("activation_21").output
-    # conv4 = resnet_base.get_layer("activation_39").output
-    conv4 = resnet_base.get_layer("activation_48").output
-
-    up_2 = UpSampling2D(size=(2, 2))(conv2)
-    up_3 = UpSampling2D(size=(4, 4))(conv3)
-    up_4 = UpSampling2D(size=(16, 16))(conv4)
-    conv_up_2 = conv_block_simple(up_2, 64, "conv_up2")
-    conv_up_3 = conv_block_simple(up_3, 64, "conv_up3")
-    conv_up_4 = conv_block_simple(up_4, 64, "conv_up4")
-    features = concatenate([conv1, conv_up_2, conv_up_3, conv_up_4], axis=-1)
-
-    conv5 = conv_block_simple(features, 128, "conv5_2")
-    pool5 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool4")(conv5)
-
-    conv6 = conv_block_simple(pool5, 128, "conv6_2")
-    pool6 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool5")(conv6)
-
-    conv7 = conv_block_simple(pool6, 128, "conv7_2")
-    conv8 = conv_block_simple(conv7, 128, "conv8_2")
-    # pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool6")(conv7)
-
-    return conv8
-
-
-def get_traj_conv_lstm(img_input_shape, point_input_shape):
-    img_input = Input(img_input_shape, name='image_input')
-    point_input = Input(point_input_shape, name='point_input')
-    features = lstm_resnet_encoder(img_input)
-    features = KB.expand_dims(features, axis=1)
-    features = KB.repeat_elements(features, point_input_shape[0], axis=1)
-
-    lstm_input = concatenate([features, point_input], axis=-1)
-
-    conv_lstm_1 = ConvLSTM2D(filters=64, kernel_size=(3, 3),
-                             padding='same', return_sequences=True, name="conv_lstm1")(lstm_input)
-    conv_lstm_1 = BatchNormalization()(conv_lstm_1)
-
-    conv_lstm_2 = ConvLSTM2D(filters=16, kernel_size=(3, 3),
-                             padding='same', return_sequences=True, name="conv_lstm2")(conv_lstm_1)
-    conv_lstm_2 = BatchNormalization()(conv_lstm_2)
-
-    prediction = Conv3D(filters=1, kernel_size=(3, 3, 3),
-                        activation='sigmoid',
-                        padding='same', data_format='channels_last', name='point_pred')(conv_lstm_2)
-    # flat_features = Flatten()(conv_lstm_2)
-    # out_y = Dense(units=32)(flat_features)
-    # out_y = Activation('softmax', name='output_y')(out_y)
-    #
-    # out_x = Dense(units=32)(flat_features)
-    # out_x = Activation('softmax', name='output_x')(out_x)
-    # prediction = Dense(32*32+1, activation='softmax', name='point_pred')(flat_features)
-    model = Model([img_input, point_input], prediction)
-    return model
-
-
 def add_classification_head(input_shape, segmentation_model, encoder_output_name, num_classes):
     model_base = make_model(input_shape, segmentation_model)
     encoder_output = model_base.get_layer(encoder_output_name).output
@@ -943,12 +718,8 @@ def make_model(input_shape, network, **kwargs):
         return get_simple_unet(input_shape)
     elif network == 'instance_unet':
         return get_instance_unet(input_shape, **kwargs)
-    elif network == 'instance_unet_connected':
-        return get_instance_unet_connect(input_shape)
-    elif network == 'instance_unet_3':
-        return get_instance_unet_3(input_shape)
-    elif network == 'instance_unet_dilated':
-        return get_instance_unet_dilated(input_shape)
+    elif network == 'instance_unet_correlation':
+        return get_instance_unet_correlation(input_shape, **kwargs)
     elif network == 'csse_unet':
         return get_csse_unet(input_shape)
     elif network == 'resnet50_fpn':
@@ -961,16 +732,5 @@ def make_model(input_shape, network, **kwargs):
         return csse_resnet50_fpn_instance(input_shape, **kwargs)
     elif network == "csse_resnet_50_fpn_instance_cls_head":
         return add_classification_head(input_shape, "csse_resnet_50_fpn_instance", **kwargs)
-    # Should we remove these models?
-    elif network == "angle_net":
-        return get_angle_net(input_shape)
-    elif network == "dist_net":
-        return get_angle_net(input_shape, num_angles=61)
-    elif network == "dist_net_unet":
-        return get_anglenet_unet(input_shape, num_angles=61)
-    elif network == "dist_net_resnet":
-        return angle_net_csse_resnet50_fpn(input_shape, channels=61)
-    elif network == "row_lstm":
-        return get_traj_conv_lstm(input_shape, (15, 32, 32, 1))
     else:
         raise ValueError("Unknown network")

@@ -225,8 +225,8 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
                 not_valid_mask = self.read_masks_borders(item_data['name'])
             else:
                 not_valid_mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.bool)
-            img = np.concatenate([img, nir_img], axis=-1)
-            # img = nir_img
+            # img = np.concatenate([img, nir_img], axis=-1)
+            img = nir_img
             img[not_valid_mask] = 0
             targets = np.zeros((img.shape[0], img.shape[1], len(self.classes)))
             for idx, cls in enumerate(self.classes):

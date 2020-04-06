@@ -10,7 +10,8 @@ from tqdm import tqdm
 from research_code.params import args
 from research_code.models import make_model
 from keras.applications import imagenet_utils
-from tensorflow.image import flip_left_right
+# from tensorflow.image import flip_left_right
+import tensorflow as tf
 from research_code.utils import calculate_ndvi
 
 def setup_env():
@@ -30,14 +31,14 @@ def setup_env():
 
 def do_tta(x, tta_type):
     if tta_type == 'hflip':
-        return flip_left_right(x, 2)
+        return tf.image.flip_left_right(x, 2)
     else:
         return x
 
 
 def undo_tta(pred, tta_type):
     if tta_type == 'hflip':
-        return flip_left_right(pred, 2)
+        return tf.image.flip_left_right(pred, 2)
     else:
         return pred
 
@@ -55,7 +56,7 @@ def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_d
     os.makedirs(output_dir, exist_ok=True)
     # if args.stacked_channels != 0:
     warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
-    model = make_model((None, None, args.stacked_channels + 3),
+    model = make_model((None, None, args.stacked_channels + 1),
                     network=args.network,
                     channels=len(args.class_names),
                     activation=args.activation)
@@ -73,7 +74,8 @@ def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_d
         nir_img = calculate_ndvi(red=red, nir_img=nir_img)
         nir_img = np.expand_dims(nir_img, axis=-1)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = np.concatenate([img, nir_img], axis=-1)
+        img = nir_img
+        # img = np.concatenate([img, nir_img], axis=-1)
         x = np.expand_dims(img, axis=0)
         x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
         preds = model.predict(x)

@@ -47,7 +47,7 @@ def train():
                                          formatted_net_alias, args.loss_function, args.crop_width,
                                          args.learning_rate) + \
         '-{epoch:d}-{val_loss:0.7f}.h5'
-    ch = 3
+    ch = 1
     activation = args.activation
     model = make_model((None, None, args.stacked_channels + ch),
                        network=args.network,
