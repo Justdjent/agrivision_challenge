@@ -58,7 +58,7 @@ def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_name
 
 def run_experiment():
     dataset_df = pd.read_csv(args.dataset_df)
-    classes = args.class_names
+    classes = list(args.class_names)
     if 'background' in classes:
         classes.remove('background')
     precompute_background_class(args.train_dir, dataset_df[dataset_df["ds_part"] == 'train'], classes)

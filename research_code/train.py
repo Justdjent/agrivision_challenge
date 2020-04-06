@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
 from research_code.data_generator import DataGeneratorSingleOutput
-from research_code.losses import make_loss, dice_coef
+from research_code.losses import make_loss, dice_coef, dice_without_background
 from research_code.models import make_model
 from research_code.params import args
 from research_code.utils import freeze_model
@@ -39,7 +39,7 @@ def train():
     model_dir = os.path.join(experiment_dir, args.models_dir)
     log_dir = os.path.join(experiment_dir, args.log_dir)
     if os.path.exists(log_dir) and len(os.listdir(log_dir)) > 0:
-        raise ValueError("Please check if this experiment was already run (logs aren't empty)")
+        raise ValueError(f"Please check if this experiment was already run, logs aren't empty - {log_dir}")
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
     best_model_file = \
@@ -65,8 +65,15 @@ def train():
 
     if args.show_summary:
         model.summary()
-    loss_list = [make_loss('bce_dice')]
-    metrics_list = [dice_coef]
+    if activation == 'softmax':
+        loss_list = [make_loss('bce_dice_softmax')]
+        metrics_list = [dice_without_background]
+    elif activation == 'sigmoid':
+        loss_list = [make_loss('bce_dice')]
+        metrics_list = [dice_coef]
+    else:
+        raise ValueError(f"Unknown activation function - {activation}")
+
     model.compile(loss=loss_list,
                   optimizer=optimizer,
                   metrics=metrics_list)
