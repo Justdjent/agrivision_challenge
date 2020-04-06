@@ -89,6 +89,7 @@ class TrainLoop:
         for epoch in range(1, epochs+1):
             # Training
             pbar = tqdm(total=len(train_dataset), desc=f"Train | Epoch {epoch}/{epochs}")
+            mean_loss = np.nan
             # NOTE: step_num doesn't update if it's a class attribute, so it's here.
             for step_num, (inputs, targets) in enumerate(train_dataset):
                 # NOTE: precalculating perform_update here speeds up self.step ALOT
@@ -97,6 +98,7 @@ class TrainLoop:
                 loss_values = self.step(inputs, targets, perform_update)
                 #TODO: use sliding weighted mean for current displayed loss
                 total_loss = tf.math.reduce_sum(loss_values)
+                mean_loss = np.nanmean(np.vstack([total_loss, mean_loss]))
                 pbar.set_postfix_str(f"Total loss: {total_loss:.3f}")
                 pbar.update(1)
             pbar.close()
@@ -133,6 +135,7 @@ class TrainLoop:
                 self.model.save_weights(self.checkpoint_path.format(epoch=epoch, metric=total_miou))
             
             # End epoch
+            self.write_logs(mean_loss, mean_total, epoch)
             self.grad_accum.reset()
             train_dataset.on_epoch_end()
             val_dataset.on_epoch_end()
