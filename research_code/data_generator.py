@@ -252,3 +252,32 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             batch_y = tf.one_hot(highest_score_label, len(self.classes), dtype=np.float32).numpy()
 
         return imagenet_utils.preprocess_input(batch_x, 'channels_last', mode='tf'), batch_y
+
+
+class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
+    'Generates data for Keras'
+
+    def __init__(self,
+                 dataset_df,
+                 classes,
+                 img_dir=None,
+                 batch_size=None,
+                 shuffle=False,
+                 reshape_size=None,
+                 crop_size=None,
+                 do_aug=False,
+                 activation=None,
+                 validate_pixels=True):
+        'Initialization'
+        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug, activation,
+                         validate_pixels)
+
+        self.on_epoch_end()
+
+    def _data_generation(self, list_IDs_temp):
+        'Generates data containing batch_size samples'
+        batch_x, batch_y = super()._data_generation(list_IDs_temp)
+        classes = np.array(np.count_nonzero(batch_y, axis=(1, 2)) != 0, dtype=np.float32)
+        if 'background' in self.classes:
+            classes = classes[:, :-1]
+        return batch_x, [batch_y, classes]
