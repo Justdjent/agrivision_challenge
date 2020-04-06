@@ -20,6 +20,7 @@ arg('--use_crop', type=distutils.util.strtobool, default='true')
 
 arg('--learning_rate', type=float, default=0.001)
 arg('--batch_size', type=int, default=1)
+arg('--accum_steps', type=int, default=1)
 
 #TODO Merge train and val
 arg('--train_dir', default='/mnt/storage/cal/data/agrivision/train')

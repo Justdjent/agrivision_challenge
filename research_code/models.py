@@ -516,7 +516,7 @@ def get_csse_hypercolumn_resnet(input_shape):
     return model
 
 
-def get_simple_unet(input_shape):
+def get_simple_unet(input_shape, channels=1, activation="sigmoid"):
     img_input = Input(input_shape)
     conv1 = conv_block_simple(img_input, 32, "conv1_1")
     conv1 = conv_block_simple(conv1, 32, "conv1_2")
@@ -548,7 +548,7 @@ def get_simple_unet(input_shape):
 
     conv7 = SpatialDropout2D(0.2)(conv7)
 
-    prediction = Conv2D(1, (1, 1), activation="sigmoid", name="prediction")(conv7)
+    prediction = Conv2D(channels, (1, 1), activation=activation, name="prediction")(conv7)
     model = Model(img_input, prediction)
     return model
 
@@ -941,7 +941,7 @@ def make_model(input_shape, network, **kwargs):
     elif network == 'hypercolumn_resnet':
         return get_csse_hypercolumn_resnet(input_shape)
     elif network == 'simple_unet':
-        return get_simple_unet(input_shape)
+        return get_simple_unet(input_shape, **kwargs)
     elif network == 'instance_unet':
         return get_instance_unet(input_shape)
     elif network == 'instance_unet_connected':

@@ -8,8 +8,8 @@ from tensorflow.keras.optimizers import Adam
 from tqdm import tqdm
 from research_code.params import args
 from research_code.gradient_accumulator import GradientAccumulator
-from research_code.datasets_tf2 import DataGenerator_angles
-from research_code.losses import make_loss, dice_coef_clipped, dice_coef, dice_coef_border, mse_masked, angle_rmse
+from research_code.data_generator import DataGeneratorSingleOutput
+from research_code.losses import make_loss, dice_coef_clipped, dice_coef, dice_coef_border
 from research_code.models import make_model
 from research_code.evaluate import m_iou, compute_confusion_matrix   
 
@@ -20,7 +20,7 @@ CLASSES = args.class_names
 class TrainLoop:
     # TODO: Add callback support
     # Can try TrainingContext() from tensorflow/python/keras/engine/training_v2.py
-    def __init__(self, model, optimizer, loss, log_dir, accum_steps=1):
+    def __init__(self, model, optimizer, loss, log_dir, checkpoint_path, accum_steps=1):
         """
         :param loss: loss object or a list of losses the size of model's outputs
         """
@@ -31,6 +31,8 @@ class TrainLoop:
         self.val_logger = tf.summary.create_file_writer(os.path.join(log_dir,'val'))
         self.accum_steps = accum_steps
         self.grad_accum = GradientAccumulator()
+        self.best_val = -np.inf
+        self.checkpoint_path = checkpoint_path
         
     @tf.function
     def calculate_loss(self, inputs, targets, training):
@@ -77,11 +79,11 @@ class TrainLoop:
     # TODO: give this a dict {"train": {"loss":n, "metric":n}, "val": {}}
     # parse it and write logs accordingly
     @tf.function
-    def write_logs(self, data, step):
+    def write_logs(self, train_loss, val_metric, step):
         with self.train_logger.as_default():
-            tf.summary.scalar(name='loss', data=data, step=step)
+            tf.summary.scalar(name='loss', data=train_loss, step=step)
         with self.val_logger.as_default():
-            tf.summary.scalar(name='loss', data=data, step=step)
+            tf.summary.scalar(name='mIoU', data=val_metric, step=step)
         
     def train(self, train_dataset, val_dataset, epochs):
         for epoch in range(1, epochs+1):
@@ -93,35 +95,42 @@ class TrainLoop:
                 # FIXME? If epoch len % accum steps != 0 this will skip all the extra batches in the end
                 perform_update = step_num % self.accum_steps
                 loss_values = self.step(inputs, targets, perform_update)
-                loss_values_dict = dict(zip(CLASSES, loss_values))
+                #TODO: use sliding weighted mean for current displayed loss
                 total_loss = tf.math.reduce_sum(loss_values)
-                loss_values_dict['Loss'] = total_loss
-                pbar.set_postfix({k: f"{v:.3f}" for k, v in loss_values_dict.items()})
+                pbar.set_postfix_str(f"Total loss: {total_loss:.3f}")
                 pbar.update(1)
-                
             pbar.close()
             
-            # TODO: Add validation, model saving, 
+            # Validation
+            pbar = tqdm(total=len(train_dataset), desc=f"Valid | Epoch {epoch}/{epochs}")
+            # FIXME: technically, a 0 here is incorrect,
+            # but in 10k+ results one zero doesn't matter that much
+            # mean_conf_matrix = np.zeros()
+            mean_total = np.full((len(CLASSES), len(CLASSES)), np.nan)
+            for inputs, targets in val_dataset:
+                outputs = self.model(inputs)
+                outputs = tf.nest.flatten(outputs)
+                outputs = [o.numpy()[0] for o in outputs]
+                outputs = np.dstack(outputs)
+                # NOTE/FIXME: The label order might become different here is bg is added
+                targets_stacked = tf.nest.flatten(targets)
+                targets_stacked = np.dstack(targets_stacked)
+                targets_stacked = targets_stacked[0]
+                # Calculate validation metric
+                conf = compute_confusion_matrix(outputs, targets_stacked, len(CLASSES))
+                #TODO: use sliding weighted mean for current displayed metric
+                mean_total = np.nanmean(np.dstack([mean_total, conf]), axis=-1)
+                pbar.update(1)
+            pbar.close()
             
-            # # Validation
-            # pbar = tqdm(total=len(train_dataset), desc=f"Valid | Epoch {epoch}/{epochs}")
-            # # FIXME: technically, a 0 here is incorrect,
-            # # but in 10k+ results one zero doesn't matter that much
-            # mean_conf_matrix = np.fill(len())
-            # for inputs, targets in val_dataset:
-            #     outputs = model(inputs)
-            #     outputs = tf.nest.flatten(outputs)
-            #     outputs = [o.numpy()[0] for o in outputs]
-            #     outputs = np.dstack(outputs, axis=-1)
-            #     outputs = outputs > 
-            #     background = np.logical_or.recude(, axis=-1)
-                
-            #     # Calculate validation metric
-            #     conf = compute_confusion_matrix(,)
-            #     total_ioum, class_ioum = m_iou(conf, len(CLASSES)) 
-            #     pbar.set_postfix({k: f"{v:.3f}" for k, v in loss_values_dict.items()})
-            #     pbar.update(1)
-
+            total_miou, perclass_miou = m_iou(conf, CLASSES)
+            mean_val_score = np.mean(total_miou)
+            tf.print(f"Total: {total_miou}")
+            tf.print(perclass_miou)
+            if total_miou > self.best_val:
+                tf.print(f"Saving model. Prev best: {self.best_val}. Current best: {total_miou}")
+                self.best_val = total_miou
+                self.model.save_weights(self.checkpoint_path.format(epoch=epoch, metric=total_miou))
             
             # End epoch
             self.grad_accum.reset()
@@ -133,62 +142,97 @@ class TrainLoop:
 
 def main():
     # Params
-    man_dir = args.manual_dataset_dir
+    train_dir = args.train_dir
+    val_dir = args.val_dir
     class_names = args.class_names
     batch_size = args.batch_size
     use_crop = args.use_crop
-    input_height = args.input_height
-    input_width = args.input_width
-    train_df_path = args.train_df
-    val_df_path = args.val_df
-    out_height = args.out_height
-    out_width = args.out_width
+    crop_height = args.crop_height
+    crop_width = args.crop_width
+    reshape_height = args.reshape_height
+    reshape_width = args.reshape_width
     epochs = args.epochs
+    do_aug = args.use_aug
     num_classes = len(args.class_names)
-    log_dir = os.path.join('./logs', args.exp_name)
+    activation = args.activation
     
-    # Params not in params.py
-    input_channels = 3
-    do_aug = True
-    accum_steps = 2
-    optimizer = Adam()
-    loss_list = [make_loss('bce_dice') for i in range(num_classes)]
-    model = make_model((None, None, input_channels))
+    input_channels = 3 + args.stacked_channels
+    accum_steps = args.accum_steps
+    optimizer = Adam(lr=args.learning_rate)
+    loss_list = [make_loss('bce_dice')]
+    model = make_model(
+        (None, None, input_channels), 
+        network=args.network, 
+        channels=len(args.class_names), 
+        activation=activation
+    )
     
-    # Read dataset descriptions
-    train_df = pd.read_csv(train_df_path)
-    val_df = pd.read_csv(val_df_path)
+    if args.weights is None:
+        print('No weights passed, training from scratch')
+    else:
+        print('Loading weights from {}'.format(args.weights))
+        model.load_weights(args.weights, by_name=True)
+        
+    experiment_dir = os.path.join(args.experiments_dir, args.exp_name)
+    model_dir = os.path.join(experiment_dir, args.models_dir)
+    log_dir = os.path.join(experiment_dir, args.log_dir)
+
+    if os.path.exists(log_dir) and len(os.listdir(log_dir)) > 0:
+        raise ValueError(f"Logs aren't empty. Logdir: {log_dir}")
+    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(log_dir, exist_ok=True)
+    best_model_file = '{}/{}-{}-{}-{:e}'.format(
+        model_dir,
+        args.network,
+        args.loss_function,
+        args.crop_width,
+        args.learning_rate
+    )
+    best_model_file = best_model_file + "-{epoch}-{metric:0.3f}.h5"
     
     # Whether to crop
     crop_size = None
     if use_crop:
-        crop_size = (input_height, input_width)
-        print('Using crops of shape ({}, {})'.format(input_height, input_width))
+        crop_size = (crop_height, crop_width)
+        print('Using crops of shape ({}, {})'.format(crop_height, crop_width))
     else:
         print('Using full size images, --use_crop=True to do crops')
-    
+    dataset_df = pd.read_csv(args.dataset_df)
+
+    train_df = dataset_df[dataset_df["ds_part"] == "train"]
+    if args.exclude_bad_labels_df:
+        invalid_df = pd.read_csv(args.exclude_bad_labels_df)
+        train_df = pd.merge(train_df, invalid_df, on='name', how='outer')
+        train_df['invalid'] = train_df['invalid'].fillna(False)
+        train_df = train_df[~train_df['invalid']]
+    val_df = dataset_df[dataset_df["ds_part"] == "val"]
+
     # Set up training
-    train_loop = TrainLoop(model, optimizer, loss_list, log_dir, accum_steps)
-    train_generator = DataGenerator_angles(
+    train_loop = TrainLoop(model, optimizer, loss_list, log_dir, best_model_file, accum_steps)
+    train_generator = DataGeneratorSingleOutput(
         train_df,
         classes=class_names,
-        img_dir=man_dir,
+        img_dir=train_dir,
         batch_size=batch_size,
         shuffle=True,
-        out_size=(args.out_height, args.out_width),
+        reshape_size=(args.reshape_height, args.reshape_width),
         crop_size=crop_size,
-        aug=do_aug,
+        do_aug=do_aug,
+        validate_pixels=True,
+        activation='sigmoid'
     )
-    val_generator = DataGenerator_angles(
+    val_generator = DataGeneratorSingleOutput(
         val_df,
         classes=class_names,
-        img_dir=man_dir,
+        img_dir=val_dir,
         # FIXME: This MUST be one for now 
         batch_size=1,
         shuffle=True,
-        out_size=(args.out_height, args.out_width),
+        reshape_size=(args.reshape_height, args.reshape_width),
         crop_size=crop_size,
-        aug=False
+        do_aug=False,
+        validate_pixels=True,
+        activation='sigmoid'
     )
     
     # Train
