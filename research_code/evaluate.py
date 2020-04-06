@@ -97,48 +97,25 @@ def plot_confusion_matrix(confusion_matrix, class_names, x_title, pred_dir, outp
     heat_map.figure.savefig(os.path.join(pred_dir, f"{output_filename}_conf_matrix.png"))
 
 
-def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_names: List[str]):
-    background_class_path = os.path.join(test_dir, "labels", "background")
-    if os.path.exists(background_class_path):
-        print("Background class has been precomputed. Skipping background class computation")
-        return
-    else:
-        print("Precomputing background class ground truth")
-        os.makedirs(background_class_path)
 
-    for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
-        filename = row['name']
-        background_ground_truth = None
-        for class_idx, class_name in enumerate(class_names):
-            ground_truth_path = os.path.join(test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
-            ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
-            ground_truth = (ground_truth / 255)
-            if background_ground_truth is None:
-                background_ground_truth = np.zeros(ground_truth.shape)
-            background_ground_truth = np.logical_or(background_ground_truth, ground_truth)
-        background_ground_truth = np.logical_not(background_ground_truth).astype(np.uint8) * 255
-        cv2.imwrite(os.path.join(background_class_path, f"{filename.replace('jpg', 'png')}"), background_ground_truth)
-    print(f"Background class was saved into {background_class_path}")
-
-
-def evaluate(test_dir: str, prediction_dir: str, output_csv: str, test_df_path: str, threshold: float,
+def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: float,
              class_names: List[str]):
     """
     Creates dataframe and tfrecords file for results visualization
     :param test_dir: Directory with images, boundaries, masks and ground truth of the test
-    :param prediction_dir: Predicted masks dir
+    :param experiments_dir: Predicted masks dir
     :param output_csv: Name for output_csv
     :param test_df_path: Path to dataframe with data about test
     :param threshold: Threshold for predictions
     :param class_names: Array of class names
     :return:
     """
+    prediction_dir = os.path.join(experiment_dir, "predictions")
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
     class_names = class_names + ['background']
     df = pd.DataFrame(columns=class_names + ['name'])
     num_classes = len(class_names)
-    precompute_background_class(test_dir, test_df, class_names[:-1])
     confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.uint64)
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
         filename = row['name']
@@ -182,7 +159,8 @@ def evaluate(test_dir: str, prediction_dir: str, output_csv: str, test_df_path: 
     x_title = f"Mean IoU - {mean_iou}\n{class_ious}"
     class_ious["mean_iou"] = mean_iou
     print(x_title)
-    output_filename = output_csv.split('.')[0]
+    output_filename = os.path.basename(experiment_dir)
+    output_csv = output_filename + ".csv"
     plot_confusion_matrix(confusion_matrix, class_names, x_title, prediction_dir, output_filename)
     with open(os.path.join(prediction_dir, f"{output_filename}_mean_ious.json"), 'w') as f:
         json.dump(class_ious, f)
@@ -190,9 +168,8 @@ def evaluate(test_dir: str, prediction_dir: str, output_csv: str, test_df_path: 
 
 
 if __name__ == '__main__':
-    evaluate(test_dir=args.test_data_dir,
-             prediction_dir=args.pred_mask_dir,
-             output_csv=args.output_csv,
-             test_df_path=args.test_df,
+    evaluate(test_dir=args.val_dir,
+             experiments_dir=args.experiments_dir,
+             test_df_path=args.dataset_df,
              threshold=args.threshold,
              class_names=args.class_names)
