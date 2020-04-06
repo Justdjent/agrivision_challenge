@@ -108,6 +108,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
             border_img = border_img > 0
         except Exception as error:
             print(border_path)
+        border_img = np.invert(border_img)
         return border_img
 
     def _data_generation(self, batch_data):
@@ -271,6 +272,7 @@ class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
         'Generates data containing batch_size samples'
         batch_x, batch_y = super()._data_generation(list_IDs_temp)
         classes = np.array(np.count_nonzero(batch_y, axis=(1, 2)) != 0, dtype=np.float32)
+        print(classes)
         if 'background' in self.classes:
             classes = classes[:, :-1]
         return batch_x, [batch_y, classes]
