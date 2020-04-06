@@ -21,6 +21,13 @@ import shutil
 POLYGON_WIDTH = 20
 
 
+def calculate_ndvi(red, nir_img):
+    diff = nir_img.astype(np.float32)- red.astype(np.float32)
+    nir_red = nir_img.astype(np.float32) + red.astype(np.float32)
+    ndvi_img = ((1 + diff/nir_red) * 127).astype(np.uint8)
+    return ndvi_img
+
+    
 def mask_raster_with_polygon(dataset, save_path, shapes, tile_size=500, all_touched=False, invert=False,
                              crop=False, pad=False):
     shape_mask, transform, window = rasterio.mask.raster_geometry_mask(dataset,

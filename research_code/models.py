@@ -553,7 +553,7 @@ def get_simple_unet(input_shape):
     return model
 
 
-def get_instance_unet(input_shape, class_names=args.class_names):
+def get_instance_unet(input_shape, channels=1, activation="sigmoid"):
     img_input = Input(input_shape)
     conv1 = conv_block_simple(img_input, 32, "conv1_1")
     conv1 = conv_block_simple(conv1, 32, "conv1_2")
@@ -584,10 +584,9 @@ def get_instance_unet(input_shape, class_names=args.class_names):
     conv7 = conv_block_simple(conv7, 32, "conv7_2")
 
     conv7 = SpatialDropout2D(0.2)(conv7)
-    output_dict = {}
-    for cls in class_names:
-        output_dict[cls] = Conv2D(1, (1, 1), activation="sigmoid", name=cls)(conv7)
-    model = Model(img_input, output_dict)
+
+    output = Conv2D(channels, (1, 1), activation=activation, name="mask")(conv7)
+    model = Model(img_input, output)
     return model
 
 
@@ -943,7 +942,7 @@ def make_model(input_shape, network, **kwargs):
     elif network == 'simple_unet':
         return get_simple_unet(input_shape)
     elif network == 'instance_unet':
-        return get_instance_unet(input_shape)
+        return get_instance_unet(input_shape, **kwargs)
     elif network == 'instance_unet_connected':
         return get_instance_unet_connect(input_shape)
     elif network == 'instance_unet_3':

@@ -8,6 +8,9 @@ from keras_applications import imagenet_utils
 from sklearn.utils import shuffle as skl_shuffle
 import albumentations as albu
 
+from research_code.utils import calculate_ndvi
+
+
 
 def reshape(reshape_size=(512, 512)):
     return albu.Compose([albu.Resize(reshape_size[0], reshape_size[1], interpolation=cv2.INTER_NEAREST, p=1)], p=1)
@@ -18,30 +21,30 @@ def strong_aug(crop_size=(512, 512)):
         albu.RandomRotate90(),
         albu.Flip(),
         albu.Transpose(),
-        albu.OneOf([
-            albu.IAAAdditiveGaussianNoise(),
-            albu.GaussNoise(),
-        ], p=0.2),
-        albu.OneOf([
-            albu.MotionBlur(p=0.2),
-            albu.MedianBlur(blur_limit=3, p=0.1),
-            albu.Blur(blur_limit=3, p=0.1),
-        ], p=0.2),
+        #albu.OneOf([
+        #    albu.IAAAdditiveGaussianNoise(),
+        #   albu.GaussNoise(),
+        #], p=0.2),
+        #albu.OneOf([
+        #    albu.MotionBlur(p=0.2),
+        #    albu.MedianBlur(blur_limit=3, p=0.1),
+        #    albu.Blur(blur_limit=3, p=0.1),
+        #], p=0.2),
         albu.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2),
+        # albu.OneOf([
+        #     albu.OpticalDistortion(p=0.3),
+        #     albu.GridDistortion(p=0.1),
+        #     albu.IAAPiecewiseAffine(p=0.3),
+        # ], p=0.2),
         albu.OneOf([
-            albu.OpticalDistortion(p=0.3),
-            albu.GridDistortion(p=0.1),
-            albu.IAAPiecewiseAffine(p=0.3),
-        ], p=0.2),
-        albu.OneOf([
-            albu.CLAHE(clip_limit=2),
-            albu.IAASharpen(),
-            albu.IAAEmboss(),
-            albu.RandomContrast(),
-            albu.RandomBrightness(),
-            albu.RGBShift(r_shift_limit=10, g_shift_limit=10, b_shift_limit=10)
-        ], p=0.3),
-        albu.HueSaturationValue(p=0.3),
+            # albu.CLAHE(clip_limit=2),
+             albu.IAASharpen(),
+             albu.IAAEmboss(),
+             albu.RandomContrast(),
+             albu.RandomBrightness(),
+             # albu.RGBShift(r_shift_limit=10, g_shift_limit=10, b_shift_limit=10)
+         ], p=0.3),
+        # albu.HueSaturationValue(p=0.3),
         albu.RandomCrop(crop_size[0], crop_size[1], p=1),
     ], p=1)
 
@@ -103,17 +106,18 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         border_path = os.path.join(
             self.img_dir, "boundaries", name.replace(".jpg", ".png")
         )
-        border_img = cv2.imread(border_path)
-        mask_path = os.path.join(self.img_dir, "masks", name.replace(".jpg", ".png"))
-        if os.path.exists(mask_path):
-            mask_img = cv2.imread(mask_path)
-            mask_img = mask_img > 0
-            mask_img = mask_img.astype(np.float32)
-        else:
-            mask_img = np.ones(border_img.shape)
+        border_img = cv2.imread(border_path, cv2.IMREAD_GRAYSCALE)
+        # mask_path = os.path.join(self.img_dir, "masks", name.replace(".jpg", ".png"))
+        # if os.path.exists(mask_path):
+        #     mask_img = cv2.imread(mask_path)
+        # else:
+        #     mask_img = np.ones(border_img.shape)
 
-        mask_img = mask_img * border_img
-        mask_img = mask_img > 0
+        mask_img = border_img
+        try:
+            mask_img = mask_img > 0
+        except Exception as error:
+            print(border_path)
         mask_img = np.invert(mask_img)
         return mask_img
 
@@ -127,12 +131,16 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
 
         for ind, item_data in batch_data.iterrows():
             img_path = os.path.join(self.img_dir, "images", "rgb", item_data["name"])
+            nir_img_path = os.path.join(self.img_dir, 'images', "nir", item_data['name'])
+            nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
+            nir_img = np.expand_dims(nir_img, axis=-1)
             img = cv2.imread(img_path)
             try:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             except Exception as error:
                 print(img_path)
                 print(error)
+            img = np.concatenate([img, nir_img], axis=-1)
             not_valid_mask = self.read_masks_borders(item_data["name"])
             img[not_valid_mask] = 0
 
@@ -200,7 +208,14 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
 
         for ind, item_data in train_batch.iterrows():
             img_path = os.path.join(self.img_dir, 'images', "rgb", item_data['name'])
+            nir_img_path = os.path.join(self.img_dir, 'images', "nir", item_data['name'])
+            nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
+
+            
             img = cv2.imread(img_path)
+            red =  img[:, :, -1]
+            ndvi_img = calculate_ndvi(red, nir_img)
+            nir_img = np.expand_dims(ndvi_img, axis=-1)
             try:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             except Exception as error:
@@ -209,14 +224,15 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             if self.validate_pixels:
                 not_valid_mask = self.read_masks_borders(item_data['name'])
             else:
-                not_valid_mask = np.zeros(img.shape, dtype=np.bool)
+                not_valid_mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.bool)
+            img = np.concatenate([img, nir_img], axis=-1)
+            # img = nir_img
             img[not_valid_mask] = 0
-
             targets = np.zeros((img.shape[0], img.shape[1], len(self.classes)))
             for idx, cls in enumerate(self.classes):
                 mask_path = os.path.join(self.img_dir, 'labels', cls, item_data['name'])
                 mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
-                mask[not_valid_mask[:, :, 0]] = 0
+                mask[not_valid_mask] = 0
                 mask = mask > 0
                 targets[:, :, idx] = mask
 
@@ -225,7 +241,6 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             if self.do_aug:
                 res = self.aug(image=img, mask=targets)
                 img, targets = res['image'], res['mask']
-
             batch_y.append(targets)
             batch_x.append(img)
 
