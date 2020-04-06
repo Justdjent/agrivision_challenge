@@ -107,8 +107,7 @@ class TrainLoop:
             pbar = tqdm(total=len(train_dataset), desc=f"Valid | Epoch {epoch}/{epochs}")
             # FIXME: technically, a 0 here is incorrect,
             # but in 10k+ results one zero doesn't matter that much
-            # mean_conf_matrix = np.zeros()
-            mean_total = np.full((len(CLASSES), len(CLASSES)), np.nan)
+            mean_conf = np.full((len(CLASSES), len(CLASSES)), np.nan)
             for inputs, targets in val_dataset:
                 outputs = self.model(inputs)
                 outputs = tf.nest.flatten(outputs)
@@ -121,7 +120,7 @@ class TrainLoop:
                 # Calculate validation metric
                 conf = compute_confusion_matrix(outputs, targets_stacked, len(CLASSES))
                 #TODO: use sliding weighted mean for current displayed metric
-                mean_total = np.nanmean(np.dstack([mean_total, conf]), axis=-1)
+                mean_conf = np.nanmean(np.dstack([mean_conf, conf]), axis=-1)
                 pbar.update(1)
             pbar.close()
             
@@ -135,7 +134,7 @@ class TrainLoop:
                 self.model.save_weights(self.checkpoint_path.format(epoch=epoch, metric=total_miou))
             
             # End epoch
-            self.write_logs(mean_loss, mean_total, epoch)
+            self.write_logs(mean_loss, mean_val_score, epoch)
             self.grad_accum.reset()
             train_dataset.on_epoch_end()
             val_dataset.on_epoch_end()
