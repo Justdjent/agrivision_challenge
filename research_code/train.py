@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
-from research_code.data_generator import DataGeneratorSingleOutput
+from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorClassificationHead
 from research_code.losses import make_loss, dice_coef, dice_without_background
 from research_code.models import make_model
 from research_code.params import args
@@ -53,7 +53,8 @@ def train():
                        network=args.network,
                        channels=len(args.class_names),
                        activation=activation,
-                       add_classification_head=args.add_classification_head)
+                       add_classification_head=args.add_classification_head,
+                       classes=args.class_names)
 
     freeze_model(model, args.freeze_till_layer)
     if args.weights is None:
@@ -75,9 +76,30 @@ def train():
     else:
         raise ValueError(f"Unknown activation function - {activation}")
 
+    loss_weights = None
+    if args.add_classification_head:
+        # if metrics are passed as lists then each metric is calculated for each task
+        losses = {}
+        metrics = {}
+        loss_weights = {}
+        # get names of output layers in order to create dict with metrics/losses
+        output_names = [layer.name.split('/')[0] for layer in model.output]
+        for name in output_names:
+            if name == "classification":
+                losses[name] = make_loss('crossentropy')
+                metrics[name] = 'binary_accuracy'
+                loss_weights[name] = 0.2
+            else:
+                losses[name] = loss_list[0]
+                metrics[name] = metrics_list[0]
+                loss_weights[name] = 0.8
+        loss_list = losses
+        metrics_list = metrics
+
     model.compile(loss=loss_list,
                   optimizer=optimizer,
-                  metrics=metrics_list)
+                  metrics=metrics_list,
+                  loss_weights=loss_weights)
 
     crop_size = None
 
@@ -97,7 +119,7 @@ def train():
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
     print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
 
-    train_generator = DataGeneratorSingleOutput(
+    train_generator = DataGeneratorClassificationHead(
         train_df,
         classes=args.class_names,
         img_dir=train_dir,
@@ -110,7 +132,7 @@ def train():
         activation=activation
     )
 
-    val_generator = DataGeneratorSingleOutput(
+    val_generator = DataGeneratorClassificationHead(
         val_df,
         classes=args.class_names,
         img_dir=val_dir,
