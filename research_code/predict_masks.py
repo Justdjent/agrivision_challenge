@@ -7,11 +7,13 @@ import pandas as pd
 import tensorflow as tf
 
 from tqdm import tqdm
+from research_code.data_generator import read_channels
 from research_code.params import args
 from research_code.models import make_model
 from keras.applications import imagenet_utils
 from tensorflow.image import flip_left_right
 from research_code.utils import calculate_ndvi
+
 
 def setup_env():
     tqdm.monitor_interval = 0
@@ -50,34 +52,21 @@ def get_new_shape(img_shape, max_shape=224):
     return new_shape
 
 
-def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels, network):
+def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_dir, input_channels, network):
     output_dir = os.path.join(experiment_dir, "predictions")
     os.makedirs(output_dir, exist_ok=True)
-    # if args.stacked_channels != 0:
-    warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
-    model = make_model((None, None, args.stacked_channels + 3),
-                    network=args.network,
-                    channels=len(args.class_names),
-                    activation=args.activation)
+    model = make_model((None, None, len(input_channels)),
+                       network=network,
+                       channels=len(args.class_names),
+                       activation=args.activation)
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
     nbr_test_samples = len(test_df)
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
-        img_path = os.path.join(test_data_dir, 'images', "rgb", row['name'])
-        nir_img_path = os.path.join(test_data_dir, 'images', "nir", row['name'])
-        nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
-        
-        img = cv2.imread(img_path)
-        red = img[:, :, -1]
-        nir_img = calculate_ndvi(red=red, nir_img=nir_img)
-        nir_img = np.expand_dims(nir_img, axis=-1)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = np.concatenate([img, nir_img], axis=-1)
-        x = np.expand_dims(img, axis=0)
+        x = read_channels(input_channels, row["name"], test_data_dir)
         x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
         preds = model.predict(x)
-        #print(preds.shape)
         for num in range(len(class_names)):
             bin_mask = (preds[0, :, :, num] * 255).astype(np.uint8)
             cur_class = class_names[num]
@@ -90,7 +79,7 @@ def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_d
 
 if __name__ == '__main__':
     setup_env()
-    
+
     predict(experiment_dir=args.experiments_dir,
             class_names=args.class_names,
             weights_path=args.weights,

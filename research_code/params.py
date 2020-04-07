@@ -40,8 +40,6 @@ arg('--net_alias', default='')
 arg('--loss_function', default='')
 
 arg('--pred_sample_csv', default='input/sample_submission.csv')
-arg('--stacked_channels', type=int, default=0)
-arg('--stacked_channels_dir', default="blue")
 arg('--edges', action='store_true')
 
 arg('--threshold', type=float, default=0.5)
@@ -50,5 +48,7 @@ arg('--exp_name')
 arg('--coord_conv', type=bool, default=False)
 arg('--use_aug', action='store_true')
 arg('--activation', default='sigmoid', choices=['sigmoid', 'softmax'])
+
+arg('--channels', nargs='+', default=['r', 'g', 'b', 'nir', 'ndvi', 'ndwi', 'l'])
 
 args = parser.parse_args()

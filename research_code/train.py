@@ -49,7 +49,7 @@ def train():
         '-{epoch:d}-{val_loss:0.7f}.h5'
     ch = 3
     activation = args.activation
-    model = make_model((None, None, args.stacked_channels + ch),
+    model = make_model((None, None, len(args.channels)),
                        network=args.network,
                        channels=len(args.class_names),
                        activation=activation)
@@ -88,6 +88,8 @@ def train():
         train_df = train_df[~train_df['invalid']]
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
 
+    train_df = train_df.sample(100)
+    val_df = val_df.sample(100)
     print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
 
     train_generator = DataGeneratorSingleOutput(
@@ -100,7 +102,8 @@ def train():
         crop_size=crop_size,
         do_aug=args.use_aug,
         validate_pixels=True,
-        activation=activation
+        activation=activation,
+        channels=args.channels
     )
 
     val_generator = DataGeneratorSingleOutput(
@@ -113,7 +116,8 @@ def train():
         crop_size=crop_size,
         do_aug=False,
         validate_pixels=True,
-        activation=activation
+        activation=activation,
+        channels=args.channels
     )
 
     best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
