@@ -39,7 +39,8 @@ def train():
     model_dir = os.path.join(experiment_dir, args.models_dir)
     log_dir = os.path.join(experiment_dir, args.log_dir)
     if os.path.exists(log_dir) and len(os.listdir(log_dir)) > 0:
-        raise ValueError("Please check if this experiment was already run (logs aren't empty) {}".format(experiment_dir))
+        raise ValueError(
+            "Please check if this experiment was already run (logs aren't empty) {}".format(experiment_dir))
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
     best_model_file = \
@@ -87,7 +88,9 @@ def train():
         for name in output_names:
             if name == "classification":
                 losses[name] = make_loss('crossentropy')
-                metrics[name] = 'binary_accuracy'
+                metrics[name] = [tf.keras.metrics.Recall(), tf.keras.metrics.Precision(),
+                                 tf.keras.metrics.AUC(num_thresholds=20, curve='ROC', name="roc"),
+                                 tf.keras.metrics.AUC(num_thresholds=20, curve='PR', name="pr")]
                 loss_weights[name] = 0.2
             else:
                 losses[name] = loss_list[0]
