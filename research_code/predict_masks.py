@@ -53,7 +53,7 @@ def get_new_shape(img_shape, max_shape=224):
 
 
 def predict(experiment_dir: str, class_names: List[str], weights_path: str, test_df_path: str, test_data_dir: str,
-            input_channels: int, network: str, add_classification_head: bool):
+            input_channels: List[str], network: str, add_classification_head: bool):
     """
         Runs model on the validation data and stores predictions in the output folder
         :param experiment_dir: Directory of the experiment. The results will be save there in 'predictions' directory
@@ -69,9 +69,8 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
 
     output_dir = os.path.join(experiment_dir, "predictions")
     os.makedirs(output_dir, exist_ok=True)
-    warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 71)
     model = make_model((None, None, len(input_channels)),
-                       network=args.network,
+                       network=network,
                        channels=len(args.class_names),
                        activation=args.activation,
                        add_classification_head=args.add_classification_head,
@@ -83,6 +82,7 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
         x = read_channels(input_channels, row["name"], test_data_dir)
         x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
+        x = np.expand_dims(x, axis=0)
         if add_classification_head:
             preds, _ = model.predict(x)
         else:

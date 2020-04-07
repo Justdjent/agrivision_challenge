@@ -293,12 +293,11 @@ class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
                  crop_size=None,
                  do_aug=False,
                  activation=None,
-                 validate_pixels=True):
+                 validate_pixels=True,
+                 channels=None):
         'Initialization'
         super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug, activation,
-                         validate_pixels)
-
-        self.on_epoch_end()
+                         validate_pixels, channels)
 
     def _data_generation(self, list_IDs_temp):
         'Generates data containing batch_size samples'

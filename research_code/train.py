@@ -95,6 +95,10 @@ def train():
                 loss_weights[name] = 0.8
         loss_list = losses
         metrics_list = metrics
+    if args.add_classification_head:
+        generator_class = DataGeneratorClassificationHead
+    else:
+        generator_class = DataGeneratorSingleOutput
 
     model.compile(loss=loss_list,
                   optimizer=optimizer,
@@ -119,7 +123,7 @@ def train():
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
     print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
 
-    train_generator = DataGeneratorSingleOutput(
+    train_generator = generator_class(
         train_df,
         classes=args.class_names,
         img_dir=train_dir,
@@ -133,7 +137,7 @@ def train():
         channels=args.channels
     )
 
-    val_generator = DataGeneratorSingleOutput(
+    val_generator = generator_class(
         val_df,
         classes=args.class_names,
         img_dir=val_dir,
