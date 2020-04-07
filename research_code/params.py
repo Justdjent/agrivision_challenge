@@ -26,7 +26,7 @@ arg('--accum_steps', type=int, default=1)
 arg('--train_dir', default='/mnt/storage/cal/data/agrivision/train')
 arg('--val_dir', default='/mnt/storage/cal/data/agrivision/val')
 arg('--dataset_df', default='/mnt/storage/cal/data/agrivision/train_val_initial_2020-03-25.csv')
-arg('--exclude_bad_labels_df', default='/mnt/storage/cal/data/agrivision/checked_low_ious.csv')
+arg('--exclude_bad_labels_df')
 
 arg('--experiments_dir', default='/mnt/storage/cal/artifacts/agrivision')
 arg('--class_names', nargs='+', default=['cloud_shadow', 'double_plant', 'planter_skip', 'standing_water', 'waterway', 'weed_cluster'])

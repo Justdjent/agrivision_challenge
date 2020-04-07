@@ -134,7 +134,10 @@ def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: f
         for class_idx, class_name in enumerate(class_names):
             ground_truth_path = os.path.join(test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
             ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
-            ground_truth = (ground_truth / 255)
+            try:
+                ground_truth = (ground_truth  > 0)
+            except:
+                print(ground_truth_path)
             if class_name == 'background':
                 prediction = np.logical_not(background_prediction)
             else:
@@ -169,7 +172,7 @@ def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: f
 
 if __name__ == '__main__':
     evaluate(test_dir=args.val_dir,
-             experiments_dir=args.experiments_dir,
+             experiment_dir=args.experiments_dir,
              test_df_path=args.dataset_df,
              threshold=args.threshold,
              class_names=args.class_names)

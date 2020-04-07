@@ -11,7 +11,7 @@ from research_code.params import args
 from research_code.models import make_model
 from keras.applications import imagenet_utils
 from tensorflow.image import flip_left_right
-
+from research_code.utils import calculate_ndvi
 
 def setup_env():
     tqdm.monitor_interval = 0
@@ -65,8 +65,15 @@ def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_d
     nbr_test_samples = len(test_df)
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
         img_path = os.path.join(test_data_dir, 'images', "rgb", row['name'])
+        nir_img_path = os.path.join(test_data_dir, 'images', "nir", row['name'])
+        nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
+        
         img = cv2.imread(img_path)
+        red = img[:, :, -1]
+        nir_img = calculate_ndvi(red=red, nir_img=nir_img)
+        nir_img = np.expand_dims(nir_img, axis=-1)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = np.concatenate([img, nir_img], axis=-1)
         x = np.expand_dims(img, axis=0)
         x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
         preds = model.predict(x)

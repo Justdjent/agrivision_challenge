@@ -39,7 +39,7 @@ def train():
     model_dir = os.path.join(experiment_dir, args.models_dir)
     log_dir = os.path.join(experiment_dir, args.log_dir)
     if os.path.exists(log_dir) and len(os.listdir(log_dir)) > 0:
-        raise ValueError("Please check if this experiment was already run (logs aren't empty)")
+        raise ValueError("Please check if this experiment was already run (logs aren't empty) {}".format(experiment_dir))
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
     best_model_file = \
@@ -87,6 +87,7 @@ def train():
         train_df['invalid'] = train_df['invalid'].fillna(False)
         train_df = train_df[~train_df['invalid']]
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
+
     print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
 
     train_generator = DataGeneratorSingleOutput(
@@ -122,7 +123,7 @@ def train():
                                  mode='min')
 
     callbacks = [best_model,
-                 EarlyStopping(patience=10, verbose=10),
+                 EarlyStopping(patience=25, verbose=10),
                  TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True,
                              write_images=True)]
 
@@ -133,7 +134,7 @@ def train():
         validation_data=val_generator,
         validation_steps=len(val_df) / args.batch_size + 1,
         callbacks=callbacks,
-        max_queue_size=4,
+        max_queue_size=6,
         workers=2)
 
     del model
