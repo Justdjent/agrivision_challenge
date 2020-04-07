@@ -1,4 +1,6 @@
 import os
+from collections import defaultdict
+
 import cv2
 
 import numpy as np
@@ -9,6 +11,7 @@ from typing import List
 from collections import defaultdict
 from keras_applications import imagenet_utils
 from sklearn.utils import shuffle as skl_shuffle
+import albumentations as albu
 
 
 def reshape(reshape_size=(512, 512)):
@@ -135,20 +138,14 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         border_path = os.path.join(
             self.img_dir, "boundaries", name.replace(".jpg", ".png")
         )
-        border_img = cv2.imread(border_path, cv2.IMREAD_GRAYSCALE)
-        # mask_path = os.path.join(self.img_dir, "masks", name.replace(".jpg", ".png"))
-        # if os.path.exists(mask_path):
-        #     mask_img = cv2.imread(mask_path)
-        # else:
-        #     mask_img = np.ones(border_img.shape)
 
-        mask_img = border_img
+        border_img = cv2.imread(border_path, cv2.IMREAD_GRAYSCALE)
         try:
-            mask_img = mask_img > 0
+            border_img = border_img > 0
         except Exception as error:
             print(border_path)
-        mask_img = np.invert(mask_img)
-        return mask_img
+        border_img = np.invert(border_img)
+        return border_img
 
     def _data_generation(self, batch_data):
         """Generates data containing batch_size samples 
@@ -160,16 +157,12 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
 
         for ind, item_data in batch_data.iterrows():
             img_path = os.path.join(self.img_dir, "images", "rgb", item_data["name"])
-            nir_img_path = os.path.join(self.img_dir, 'images', "nir", item_data['name'])
-            nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
-            nir_img = np.expand_dims(nir_img, axis=-1)
             img = cv2.imread(img_path)
             try:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             except Exception as error:
                 print(img_path)
                 print(error)
-            img = np.concatenate([img, nir_img], axis=-1)
             not_valid_mask = self.read_masks_borders(item_data["name"])
             img[not_valid_mask] = 0
 
@@ -285,3 +278,32 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             batch_y = tf.one_hot(highest_score_label, len(self.classes), dtype=np.float32).numpy()
 
         return imagenet_utils.preprocess_input(batch_x, 'channels_last', mode='tf'), batch_y
+
+
+class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
+    'Generates data for Keras'
+
+    def __init__(self,
+                 dataset_df,
+                 classes,
+                 img_dir=None,
+                 batch_size=None,
+                 shuffle=False,
+                 reshape_size=None,
+                 crop_size=None,
+                 do_aug=False,
+                 activation=None,
+                 validate_pixels=True):
+        'Initialization'
+        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug, activation,
+                         validate_pixels)
+
+        self.on_epoch_end()
+
+    def _data_generation(self, list_IDs_temp):
+        'Generates data containing batch_size samples'
+        batch_x, batch_y = super()._data_generation(list_IDs_temp)
+        classes = np.array(np.count_nonzero(batch_y, axis=(1, 2)) != 0, dtype=np.float32)
+        if 'background' in self.classes:
+            classes = classes[:, :-1]
+        return batch_x, [batch_y, classes]

@@ -5,8 +5,8 @@ import tensorflow as tf
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
-from research_code.data_generator import DataGeneratorSingleOutput
-from research_code.losses import make_loss, dice_coef
+from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorClassificationHead
+from research_code.losses import make_loss, dice_coef, dice_without_background
 from research_code.models import make_model
 from research_code.params import args
 from research_code.utils import freeze_model
@@ -52,7 +52,9 @@ def train():
     model = make_model((None, None, len(args.channels)),
                        network=args.network,
                        channels=len(args.class_names),
-                       activation=activation)
+                       activation=activation,
+                       add_classification_head=args.add_classification_head,
+                       classes=args.class_names)
 
     freeze_model(model, args.freeze_till_layer)
     if args.weights is None:
@@ -65,11 +67,39 @@ def train():
 
     if args.show_summary:
         model.summary()
-    loss_list = [make_loss('bce_dice')]
-    metrics_list = [dice_coef]
+    if activation == 'softmax':
+        loss_list = [make_loss('bce_dice_softmax')]
+        metrics_list = [dice_without_background]
+    elif activation == 'sigmoid':
+        loss_list = [make_loss('bce_dice')]
+        metrics_list = [dice_coef]
+    else:
+        raise ValueError(f"Unknown activation function - {activation}")
+
+    loss_weights = None
+    if args.add_classification_head:
+        # if metrics are passed as lists then each metric is calculated for each task
+        losses = {}
+        metrics = {}
+        loss_weights = {}
+        # get names of output layers in order to create dict with metrics/losses
+        output_names = [layer.name.split('/')[0] for layer in model.output]
+        for name in output_names:
+            if name == "classification":
+                losses[name] = make_loss('crossentropy')
+                metrics[name] = 'binary_accuracy'
+                loss_weights[name] = 0.2
+            else:
+                losses[name] = loss_list[0]
+                metrics[name] = metrics_list[0]
+                loss_weights[name] = 0.8
+        loss_list = losses
+        metrics_list = metrics
+
     model.compile(loss=loss_list,
                   optimizer=optimizer,
-                  metrics=metrics_list)
+                  metrics=metrics_list,
+                  loss_weights=loss_weights)
 
     crop_size = None
 
@@ -87,9 +117,6 @@ def train():
         train_df['invalid'] = train_df['invalid'].fillna(False)
         train_df = train_df[~train_df['invalid']]
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
-
-    train_df = train_df.sample(100)
-    val_df = val_df.sample(100)
     print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
 
     train_generator = DataGeneratorSingleOutput(
@@ -138,7 +165,7 @@ def train():
         validation_data=val_generator,
         validation_steps=len(val_df) / args.batch_size + 1,
         callbacks=callbacks,
-        max_queue_size=6,
+        max_queue_size=4,
         workers=2)
 
     del model

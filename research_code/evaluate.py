@@ -97,14 +97,12 @@ def plot_confusion_matrix(confusion_matrix, class_names, x_title, pred_dir, outp
     heat_map.figure.savefig(os.path.join(pred_dir, f"{output_filename}_conf_matrix.png"))
 
 
-
 def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: float,
              class_names: List[str]):
     """
     Creates dataframe and tfrecords file for results visualization
     :param test_dir: Directory with images, boundaries, masks and ground truth of the test
-    :param experiments_dir: Predicted masks dir
-    :param output_csv: Name for output_csv
+    :param experiment_dir: Predicted masks dir
     :param test_df_path: Path to dataframe with data about test
     :param threshold: Threshold for predictions
     :param class_names: Array of class names

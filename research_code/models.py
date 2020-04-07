@@ -923,16 +923,30 @@ def get_traj_conv_lstm(img_input_shape, point_input_shape):
     return model
 
 
-def add_classification_head(input_shape, segmentation_model, encoder_output_name, num_classes):
-    model_base = make_model(input_shape, segmentation_model)
-    encoder_output = model_base.get_layer(encoder_output_name).output
+def add_classification_head(segmentation_model, encoder_output_name, channels):
+    encoder_output = segmentation_model.get_layer(encoder_output_name).output
     x = GlobalAveragePooling2D(name="avg_pool_classification_head")(encoder_output)
-    classes = Dense(num_classes, activation='sigmoid', name='classes_prediction')(x)
-    final_model = Model(inputs=[model_base.input], outputs=[model_base.output, classes])
+    classes = Dense(channels, activation='sigmoid', name='classification')(x)
+    final_model = Model(inputs=[segmentation_model.input],
+                        outputs=[segmentation_model.output, classes])
     return final_model
 
 
 def make_model(input_shape, network, **kwargs):
+    if kwargs["add_classification_head"]:
+        kwargs["add_classification_head"] = False
+        classification_classes = kwargs["channels"] - 1 if 'background' in kwargs["classes"] else kwargs["channels"]
+        segmentation_model = make_model(input_shape, network, **kwargs)
+        # currently supports only resnet50 architecture
+        segmentation_model_with_cls_head = add_classification_head(segmentation_model,
+                                                                   encoder_output_name="activation_48",
+                                                                   channels=classification_classes)
+        return segmentation_model_with_cls_head
+    else:
+        if "classes" in kwargs.keys():
+            kwargs.pop("classes")
+        if "add_classification_head" in kwargs.keys():
+            kwargs.pop("add_classification_head")
     if network == 'resnet50':
         return get_unet_resnet(input_shape)
     elif network == 'csse_resnet50':
@@ -959,9 +973,7 @@ def make_model(input_shape, network, **kwargs):
         return csse_resnet50_fpn_multi(input_shape, **kwargs)
     elif network == "csse_resnet_50_fpn_instance":
         return csse_resnet50_fpn_instance(input_shape, **kwargs)
-    elif network == "csse_resnet_50_fpn_instance_cls_head":
-        return add_classification_head(input_shape, "csse_resnet_50_fpn_instance", **kwargs)
-    # Should we remove these models?
+
     elif network == "angle_net":
         return get_angle_net(input_shape)
     elif network == "dist_net":

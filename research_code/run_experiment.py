@@ -106,7 +106,7 @@ def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_name
 
 def run_experiment():
     dataset_df = pd.read_csv(args.dataset_df)
-    classes = args.class_names
+    classes = list(args.class_names)
     if 'background' in classes:
         classes.remove('background')
     for ds_part, ds_dir in zip(['train', 'val'], [args.train_dir, args.val_dir]):
@@ -130,7 +130,8 @@ def run_experiment():
             test_df_path=test_df_path,
             test_data_dir=test_data_dir,
             input_channels=args.channels,
-            network=args.network)
+            network=args.network,
+            add_classification_head=args.add_classification_head)
     print(f"Starting evaluation process of results in {prediction_dir}")
     evaluate(test_dir=test_data_dir,
              experiment_dir=experiment_dir,
