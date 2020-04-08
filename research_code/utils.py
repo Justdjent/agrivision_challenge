@@ -22,9 +22,10 @@ POLYGON_WIDTH = 20
 
 
 def calculate_ndvi(red, nir_img):
+    np.seterr(divide='ignore', invalid='ignore')
     diff = nir_img.astype(np.float32)- red.astype(np.float32)
     nir_red = nir_img.astype(np.float32) + red.astype(np.float32)
-    ndvi_img = ((1 + diff/nir_red) * 127).astype(np.uint8)
+    ndvi_img = ((1 + diff/(nir_red + 0.00001)) * 127).astype(np.uint8)
     return ndvi_img
 
     

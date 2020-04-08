@@ -21,30 +21,13 @@ def strong_aug(crop_size=(512, 512)):
         albu.RandomRotate90(),
         albu.Flip(),
         albu.Transpose(),
-        #albu.OneOf([
-        #    albu.IAAAdditiveGaussianNoise(),
-        #   albu.GaussNoise(),
-        #], p=0.2),
-        #albu.OneOf([
-        #    albu.MotionBlur(p=0.2),
-        #    albu.MedianBlur(blur_limit=3, p=0.1),
-        #    albu.Blur(blur_limit=3, p=0.1),
-        #], p=0.2),
         albu.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2),
-        # albu.OneOf([
-        #     albu.OpticalDistortion(p=0.3),
-        #     albu.GridDistortion(p=0.1),
-        #     albu.IAAPiecewiseAffine(p=0.3),
-        # ], p=0.2),
         albu.OneOf([
-            # albu.CLAHE(clip_limit=2),
              albu.IAASharpen(),
              albu.IAAEmboss(),
              albu.RandomContrast(),
              albu.RandomBrightness(),
-             # albu.RGBShift(r_shift_limit=10, g_shift_limit=10, b_shift_limit=10)
          ], p=0.3),
-        # albu.HueSaturationValue(p=0.3),
         albu.RandomCrop(crop_size[0], crop_size[1], p=1),
     ], p=1)
 

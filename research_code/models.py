@@ -592,15 +592,15 @@ def get_instance_unet(input_shape, channels=1, activation="sigmoid"):
 
 
 def get_instance_unet_correlation(input_shape, channels=1, activation="sigmoid"):
-    max_distance = 240
+    max_distance = 20
     img_input = Input(input_shape)
-    corr1 = CorrelationCost(pad=max_distance,
-                            kernel_size=1,
-                            max_displacement=max_distance,
-                            stride_1=1,
-                            stride_2=2,
-                            data_format="channels_last")([img_input, img_input])
-    corr1 = np.concatenate([img_input, corr1], axis=-1)
+    #corr1 = CorrelationCost(pad=max_distance,
+    #                        kernel_size=1,
+    #                        max_displacement=max_distance,
+    #                        stride_1=1,
+    #                        stride_2=2,
+    #                        data_format="channels_last")([img_input, img_input])
+    #corr1 = np.concatenate([img_input, corr1], axis=-1)
     conv1 = conv_block_simple(img_input, 32, "conv1_1")
     conv1 = conv_block_simple(conv1, 32, "conv1_2")
     pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
@@ -619,24 +619,24 @@ def get_instance_unet_correlation(input_shape, channels=1, activation="sigmoid")
     conv3 = conv_block_simple(pool2, 128, "conv3_1")
     conv3 = conv_block_simple(conv3, 128, "conv3_2")
     pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
-    #corr3 = CorrelationCost(pad=max_distance//4,
-    #                        kernel_size=1,
-    #                        max_displacement=max_distance//4,
-    #                        stride_1=1,
-    #                        stride_2=2,
-    #                        data_format="channels_last")([conv3, conv3])
+    corr3 = CorrelationCost(pad=max_distance,
+                            kernel_size=1,
+                            max_displacement=max_distance,
+                            stride_1=1,
+                            stride_2=2,
+                            data_format="channels_last")([conv3, conv3])
 
     conv4 = conv_block_simple(pool3, 256, "conv4_1")
     conv4 = conv_block_simple(conv4, 256, "conv4_2")
     conv4 = conv_block_simple(conv4, 256, "conv4_3")
-    #corr4 = CorrelationCost(pad=max_distance,
-    #                        kernel_size=1,
-    #                        max_displacement=max_distance,
-    #                        stride_1=1,
-    #                       stride_2=2,
-    #                        data_format="channels_last")([conv4, conv4])
-    # conv4 = concatenate([conv4, corr4], axis=-1)
-    up5 = concatenate([UpSampling2D()(conv4), conv3], axis=-1)
+    corr4 = CorrelationCost(pad=max_distance,
+                            kernel_size=1,
+                            max_displacement=max_distance,
+                            stride_1=1,
+                            stride_2=2,
+                            data_format="channels_last")([conv4, conv4])
+    conv4 = concatenate([conv4, corr4], axis=-1)
+    up5 = concatenate([UpSampling2D()(conv4), conv3, corr3], axis=-1)
     conv5 = conv_block_simple(up5, 128, "conv5_1")
     conv5 = conv_block_simple(conv5, 128, "conv5_2")
 

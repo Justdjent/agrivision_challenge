@@ -33,7 +33,7 @@ arg('--models_dir', default='models')
 arg('--log_dir', default='logs')
 arg('--weights')
 arg('--freeze_till_layer', default='input_1')
-arg('--show_summary', type=bool, default=False)
+arg('--show_summary',  action='store_true')
 arg('--network', default='instance_unet')
 
 arg('--net_alias', default='')
