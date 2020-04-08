@@ -16,11 +16,12 @@ from research_code.evaluate import m_iou, compute_confusion_matrix
 tf.get_logger().setLevel(logging.INFO)
 
 CLASSES = args.class_names
+CLASSES_bg = args.class_names.copy().append("background")
 
 class TrainLoop:
     # TODO: Add callback support
     # Can try TrainingContext() from tensorflow/python/keras/engine/training_v2.py
-    def __init__(self, model, optimizer, loss, log_dir, checkpoint_path, accum_steps=1):
+    def __init__(self, model, optimizer, loss, log_dir, checkpoint_path, accum_steps=1, val_threshold=0.5):
         """
         :param loss: loss object or a list of losses the size of model's outputs
         """
@@ -33,6 +34,7 @@ class TrainLoop:
         self.grad_accum = GradientAccumulator()
         self.best_val = -np.inf
         self.checkpoint_path = checkpoint_path
+        self.val_threshold = val_threshold
         
     @tf.function
     def calculate_loss(self, inputs, targets, training):
@@ -105,20 +107,22 @@ class TrainLoop:
             
             # Validation
             pbar = tqdm(total=len(val_dataset), desc=f"Valid | Epoch {epoch}/{epochs}")
-            # FIXME: technically, a 0 here is incorrect,
-            # but in 10k+ results one zero doesn't matter that much
-            mean_conf = np.full((len(CLASSES), len(CLASSES)), np.nan)
+
+            mean_conf = np.full((len(CLASSES_bg), len(CLASSES_bg)), np.nan)
             for inputs, targets in val_dataset:
                 outputs = self.model(inputs)
                 outputs = tf.nest.flatten(outputs)
                 outputs = [o.numpy()[0] for o in outputs]
                 outputs = np.dstack(outputs)
-                # NOTE/FIXME: The label order might become different here is bg is added
+                outputs = outputs > self.val_threshold
+                output_bg = ~np.logical_or.reduce(outputs, axis=-1)
+                outputs = np.dstack([outputs, output_bg])
+                
                 targets_stacked = tf.nest.flatten(targets)
                 targets_stacked = np.dstack(targets_stacked)
                 targets_stacked = targets_stacked[0]
                 # Calculate validation metric
-                conf = compute_confusion_matrix(outputs, targets_stacked, len(CLASSES))
+                conf = compute_confusion_matrix(outputs, targets_stacked, len(CLASSES_bg))
                 #TODO: use sliding weighted mean for current displayed metric
                 mean_conf = np.nanmean(np.dstack([mean_conf, conf]), axis=-1)
                 pbar.update(1)
@@ -225,7 +229,7 @@ def main():
     )
     val_generator = DataGeneratorSingleOutput(
         val_df,
-        classes=class_names,
+        classes=CLASSES_bg,
         img_dir=val_dir,
         # FIXME: This MUST be one for now 
         batch_size=1,
