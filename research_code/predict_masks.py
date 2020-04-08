@@ -7,6 +7,8 @@ import pandas as pd
 import tensorflow as tf
 
 from tqdm import tqdm
+from research_code.data_generator import read_channels
+from typing import List
 from research_code.params import args
 from research_code.models import make_model
 from keras.applications import imagenet_utils
@@ -50,27 +52,41 @@ def get_new_shape(img_shape, max_shape=224):
     return new_shape
 
 
-def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_dir, stacked_channels, network):
+def predict(experiment_dir: str, class_names: List[str], weights_path: str, test_df_path: str, test_data_dir: str,
+            input_channels: List[str], network: str, add_classification_head: bool):
+    """
+        Runs model on the validation data and stores predictions in the output folder
+        :param experiment_dir: Directory of the experiment. The results will be save there in 'predictions' directory
+        :param class_names: Array of class names
+        :param weights_path: Path to .h5 file where model's weights are stored
+        :param test_df_path: Path to dataframe with data about test set
+        :param test_data_dir: Path to directory with images, boundaries, masks and ground truth of the test
+        :param input_channels: List of channels to be used
+        :param network: Name of the used model architecture
+        :param add_classification_head: Flag if model was trained with additional head for classification task
+        :return:
+    """
+
     output_dir = os.path.join(experiment_dir, "predictions")
     os.makedirs(output_dir, exist_ok=True)
-    # if args.stacked_channels != 0:
-    warnings.showwarning("Currently there is only rgb image being read", UserWarning, 'predict_masks.py', 57)
-    model = make_model((None, None, args.stacked_channels + 3),
-                    network=args.network,
-                    channels=len(args.class_names),
-                    activation=args.activation)
+    model = make_model((None, None, len(input_channels)),
+                       network=network,
+                       channels=len(args.class_names),
+                       activation=args.activation,
+                       add_classification_head=args.add_classification_head,
+                       classes=args.class_names)
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
     nbr_test_samples = len(test_df)
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
-        img_path = os.path.join(test_data_dir, 'images', "rgb", row['name'])
-        img = cv2.imread(img_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        x = np.expand_dims(img, axis=0)
+        x = read_channels(input_channels, row["name"], test_data_dir)
         x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
-        preds = model.predict(x)
-        #print(preds.shape)
+        x = np.expand_dims(x, axis=0)
+        if add_classification_head:
+            preds, _ = model.predict(x)
+        else:
+            preds = model.predict(x)
         for num in range(len(class_names)):
             bin_mask = (preds[0, :, :, num] * 255).astype(np.uint8)
             cur_class = class_names[num]
@@ -83,11 +99,12 @@ def predict(experiment_dir, class_names, weights_path, test_df_path, test_data_d
 
 if __name__ == '__main__':
     setup_env()
-    
+
     predict(experiment_dir=args.experiments_dir,
             class_names=args.class_names,
             weights_path=args.weights,
             test_df_path=args.dataset_df,
             test_data_dir=args.val_dir,
-            stacked_channels=args.stacked_channels,
-            network=args.network)
+            input_channels=args.channels,
+            network=args.network,
+            add_classification_head=args.add_classification_head)

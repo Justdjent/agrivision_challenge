@@ -553,7 +553,7 @@ def get_simple_unet(input_shape):
     return model
 
 
-def get_instance_unet(input_shape, class_names=args.class_names):
+def get_instance_unet(input_shape, channels=1, activation="sigmoid"):
     img_input = Input(input_shape)
     conv1 = conv_block_simple(img_input, 32, "conv1_1")
     conv1 = conv_block_simple(conv1, 32, "conv1_2")
@@ -584,10 +584,9 @@ def get_instance_unet(input_shape, class_names=args.class_names):
     conv7 = conv_block_simple(conv7, 32, "conv7_2")
 
     conv7 = SpatialDropout2D(0.2)(conv7)
-    output_dict = {}
-    for cls in class_names:
-        output_dict[cls] = Conv2D(1, (1, 1), activation="sigmoid", name=cls)(conv7)
-    model = Model(img_input, output_dict)
+
+    output = Conv2D(channels, (1, 1), activation=activation, name="mask")(conv7)
+    model = Model(img_input, output)
     return model
 
 
@@ -924,16 +923,30 @@ def get_traj_conv_lstm(img_input_shape, point_input_shape):
     return model
 
 
-def add_classification_head(input_shape, segmentation_model, encoder_output_name, num_classes):
-    model_base = make_model(input_shape, segmentation_model)
-    encoder_output = model_base.get_layer(encoder_output_name).output
+def add_classification_head(segmentation_model, encoder_output_name, channels):
+    encoder_output = segmentation_model.get_layer(encoder_output_name).output
     x = GlobalAveragePooling2D(name="avg_pool_classification_head")(encoder_output)
-    classes = Dense(num_classes, activation='sigmoid', name='classes_prediction')(x)
-    final_model = Model(inputs=[model_base.input], outputs=[model_base.output, classes])
+    classes = Dense(channels, activation='sigmoid', name='classification')(x)
+    final_model = Model(inputs=[segmentation_model.input],
+                        outputs=[segmentation_model.output, classes])
     return final_model
 
 
 def make_model(input_shape, network, **kwargs):
+    if kwargs["add_classification_head"]:
+        kwargs["add_classification_head"] = False
+        classification_classes = kwargs["channels"] - 1 if 'background' in kwargs["classes"] else kwargs["channels"]
+        segmentation_model = make_model(input_shape, network, **kwargs)
+        # currently supports only resnet50 architecture
+        segmentation_model_with_cls_head = add_classification_head(segmentation_model,
+                                                                   encoder_output_name="activation_48",
+                                                                   channels=classification_classes)
+        return segmentation_model_with_cls_head
+    else:
+        if "classes" in kwargs.keys():
+            kwargs.pop("classes")
+        if "add_classification_head" in kwargs.keys():
+            kwargs.pop("add_classification_head")
     if network == 'resnet50':
         return get_unet_resnet(input_shape)
     elif network == 'csse_resnet50':
@@ -943,7 +956,7 @@ def make_model(input_shape, network, **kwargs):
     elif network == 'simple_unet':
         return get_simple_unet(input_shape)
     elif network == 'instance_unet':
-        return get_instance_unet(input_shape)
+        return get_instance_unet(input_shape, **kwargs)
     elif network == 'instance_unet_connected':
         return get_instance_unet_connect(input_shape)
     elif network == 'instance_unet_3':
@@ -960,9 +973,7 @@ def make_model(input_shape, network, **kwargs):
         return csse_resnet50_fpn_multi(input_shape, **kwargs)
     elif network == "csse_resnet_50_fpn_instance":
         return csse_resnet50_fpn_instance(input_shape, **kwargs)
-    elif network == "csse_resnet_50_fpn_instance_cls_head":
-        return add_classification_head(input_shape, "csse_resnet_50_fpn_instance", **kwargs)
-    # Should we remove these models?
+
     elif network == "angle_net":
         return get_angle_net(input_shape)
     elif network == "dist_net":

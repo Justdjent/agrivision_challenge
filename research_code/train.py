@@ -5,8 +5,8 @@ import tensorflow as tf
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
-from research_code.data_generator import DataGeneratorSingleOutput
-from research_code.losses import make_loss, dice_coef
+from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorClassificationHead
+from research_code.losses import make_loss, dice_coef, dice_without_background
 from research_code.models import make_model
 from research_code.params import args
 from research_code.utils import freeze_model
@@ -39,7 +39,8 @@ def train():
     model_dir = os.path.join(experiment_dir, args.models_dir)
     log_dir = os.path.join(experiment_dir, args.log_dir)
     if os.path.exists(log_dir) and len(os.listdir(log_dir)) > 0:
-        raise ValueError("Please check if this experiment was already run (logs aren't empty)")
+        raise ValueError(
+            "Please check if this experiment was already run (logs aren't empty) {}".format(experiment_dir))
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
     best_model_file = \
@@ -49,10 +50,12 @@ def train():
         '-{epoch:d}-{val_loss:0.7f}.h5'
     ch = 3
     activation = args.activation
-    model = make_model((None, None, args.stacked_channels + ch),
+    model = make_model((None, None, len(args.channels)),
                        network=args.network,
                        channels=len(args.class_names),
-                       activation=activation)
+                       activation=activation,
+                       add_classification_head=args.add_classification_head,
+                       classes=args.class_names)
 
     freeze_model(model, args.freeze_till_layer)
     if args.weights is None:
@@ -65,11 +68,45 @@ def train():
 
     if args.show_summary:
         model.summary()
-    loss_list = [make_loss('bce_dice')]
-    metrics_list = [dice_coef]
+    if activation == 'softmax':
+        loss_list = [make_loss('bce_dice_softmax')]
+        metrics_list = [dice_without_background]
+    elif activation == 'sigmoid':
+        loss_list = [make_loss('bce_dice')]
+        metrics_list = [dice_coef]
+    else:
+        raise ValueError(f"Unknown activation function - {activation}")
+
+    loss_weights = None
+    if args.add_classification_head:
+        # if metrics are passed as lists then each metric is calculated for each task
+        losses = {}
+        metrics = {}
+        loss_weights = {}
+        # get names of output layers in order to create dict with metrics/losses
+        output_names = [layer.name.split('/')[0] for layer in model.output]
+        for name in output_names:
+            if name == "classification":
+                losses[name] = make_loss('crossentropy')
+                metrics[name] = [tf.keras.metrics.Recall(), tf.keras.metrics.Precision(),
+                                 tf.keras.metrics.AUC(num_thresholds=20, curve='ROC', name="roc"),
+                                 tf.keras.metrics.AUC(num_thresholds=20, curve='PR', name="pr")]
+                loss_weights[name] = args.cls_head_loss_weight
+            else:
+                losses[name] = loss_list[0]
+                metrics[name] = metrics_list[0]
+                loss_weights[name] = 1 - args.cls_head_loss_weight
+        loss_list = losses
+        metrics_list = metrics
+    if args.add_classification_head:
+        generator_class = DataGeneratorClassificationHead
+    else:
+        generator_class = DataGeneratorSingleOutput
+
     model.compile(loss=loss_list,
                   optimizer=optimizer,
-                  metrics=metrics_list)
+                  metrics=metrics_list,
+                  loss_weights=loss_weights)
 
     crop_size = None
 
@@ -89,7 +126,7 @@ def train():
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
     print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
 
-    train_generator = DataGeneratorSingleOutput(
+    train_generator = generator_class(
         train_df,
         classes=args.class_names,
         img_dir=train_dir,
@@ -99,10 +136,11 @@ def train():
         crop_size=crop_size,
         do_aug=args.use_aug,
         validate_pixels=True,
-        activation=activation
+        activation=activation,
+        channels=args.channels
     )
 
-    val_generator = DataGeneratorSingleOutput(
+    val_generator = generator_class(
         val_df,
         classes=args.class_names,
         img_dir=val_dir,
@@ -112,7 +150,8 @@ def train():
         crop_size=crop_size,
         do_aug=False,
         validate_pixels=True,
-        activation=activation
+        activation=activation,
+        channels=args.channels
     )
 
     best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
@@ -122,7 +161,7 @@ def train():
                                  mode='min')
 
     callbacks = [best_model,
-                 EarlyStopping(patience=10, verbose=10),
+                 EarlyStopping(patience=25, verbose=10),
                  TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True,
                              write_images=True)]
 
