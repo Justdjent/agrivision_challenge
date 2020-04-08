@@ -91,11 +91,11 @@ def train():
                 metrics[name] = [tf.keras.metrics.Recall(), tf.keras.metrics.Precision(),
                                  tf.keras.metrics.AUC(num_thresholds=20, curve='ROC', name="roc"),
                                  tf.keras.metrics.AUC(num_thresholds=20, curve='PR', name="pr")]
-                loss_weights[name] = 0.2
+                loss_weights[name] = args.cls_head_loss_weight
             else:
                 losses[name] = loss_list[0]
                 metrics[name] = metrics_list[0]
-                loss_weights[name] = 0.8
+                loss_weights[name] = 1 - args.cls_head_loss_weight
         loss_list = losses
         metrics_list = metrics
     if args.add_classification_head:
