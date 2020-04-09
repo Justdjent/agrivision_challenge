@@ -10,6 +10,7 @@ from research_code.params import args
 from research_code.train import train
 from research_code.predict_masks import predict
 from research_code.evaluate import evaluate
+from research_code.predict_masks_submission import generate_submission
 from research_code.utils import calculate_ndvi, calculate_ndwi, calculate_lightness
 
 
@@ -138,6 +139,9 @@ def run_experiment():
              test_df_path=test_df_path,
              threshold=args.threshold,
              class_names=args.class_names)
+
+    print("Generating submission")
+    generate_submission(thresh=args.threshold, weights_path=weights_path)
 
 
 if __name__ == "__main__":
