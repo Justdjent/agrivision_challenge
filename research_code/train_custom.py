@@ -111,7 +111,7 @@ class TrainLoop:
             # Validation
             pbar = tqdm(total=len(val_dataset), desc=f"Valid | Epoch {epoch}/{epochs}")
 
-            mean_conf = np.full((len(CLASSES_bg), len(CLASSES_bg)), np.nan)
+            total_conf = np.zeros((len(CLASSES_bg), len(CLASSES_bg)), dtype=np.uint64)
             for inputs, targets in val_dataset:
                 outputs = self.model(inputs)
                 outputs = tf.nest.flatten(outputs)
@@ -124,11 +124,11 @@ class TrainLoop:
                 # Calculate validation metric
                 conf = compute_confusion_matrix(outputs, targets[0], len(CLASSES_bg))
                 #TODO: use sliding weighted mean for current displayed metric
-                mean_conf = np.nanmean(np.dstack([mean_conf, conf]), axis=-1)
+                total_conf = np.nansum(np.dstack([total_conf, conf]), axis=-1)
                 pbar.update(1)
             pbar.close()
             
-            total_miou, perclass_miou = m_iou(conf, CLASSES_bg)
+            total_miou, perclass_miou = m_iou(total_conf, CLASSES_bg)
             mean_val_score = np.mean(total_miou)
             tf.print(f"Total: {total_miou}")
             tf.print(perclass_miou)
