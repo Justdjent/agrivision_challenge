@@ -107,7 +107,7 @@ def train():
         val_df,
         classes=args.class_names,
         img_dir=val_dir,
-        batch_size=args.batch_size,
+        batch_size=args.batch_size//4,
         shuffle=True,
         reshape_size=(args.reshape_height, args.reshape_width),
         crop_size=crop_size,
