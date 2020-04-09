@@ -18,7 +18,7 @@ def setup_env():
         try:
             # Currently, memory growth needs to be the same across GPUs
             for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
+                # tf.config.experimental.set_memory_growth(gpu, True)
                 logical_gpus = tf.config.experimental.list_logical_devices('GPU')
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:
@@ -172,8 +172,8 @@ def train():
         validation_data=val_generator,
         validation_steps=len(val_df) / args.batch_size + 1,
         callbacks=callbacks,
-        max_queue_size=4,
-        workers=2)
+        max_queue_size=32,
+        workers=4)
 
     del model
     tf.keras.backend.clear_session()
