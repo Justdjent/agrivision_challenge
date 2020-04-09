@@ -1,9 +1,14 @@
 import argparse
 import logging
 import os
+import sys
 from copy import deepcopy
 
 import tensorflow as tf
+import tensorflow.keras.mixed_precision.experimental as mixed_precision
+policy = mixed_precision.Policy('mixed_float16')
+mixed_precision.set_policy(policy)
+
 import numpy as np
 import pandas as pd
 from tensorflow.keras.optimizers import Adam
@@ -13,7 +18,7 @@ from research_code.gradient_accumulator import GradientAccumulator
 from research_code.data_generator import DataGeneratorSingleOutput
 from research_code.losses import make_loss, dice_coef_clipped, dice_coef, dice_coef_border
 from research_code.models import make_model
-from research_code.evaluate import m_iou, compute_confusion_matrix   
+from research_code.evaluate import m_iou, compute_confusion_matrix
 
 tf.get_logger().setLevel(logging.INFO)
 
@@ -29,7 +34,8 @@ class TrainLoop:
         :param loss: loss object or a list of losses the size of model's outputs
         """
         self.model = model
-        self.optimizer = optimizer
+        # self.optimizer = optimizer
+        self.optimizer = mixed_precision.LossScaleOptimizer(optimizer, loss_scale='dynamic')
         self.loss = loss
         self.train_logger = tf.summary.create_file_writer(os.path.join(log_dir,'train'))
         self.val_logger = tf.summary.create_file_writer(os.path.join(log_dir,'val'))
@@ -42,21 +48,24 @@ class TrainLoop:
     @tf.function
     def calculate_loss(self, inputs, targets, training):
         outs = self.model(inputs, training=training)
-        outs = tf.nest.flatten(outs)
-        targets = tf.nest.flatten(targets)
+        # outs = tf.nest.flatten(outs)
+        # targets = tf.nest.flatten(targets)
         # NOTE: Go here for examples of more functionality 
         # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/engine/training_eager.py#L159
-        output_losses = []
-        for i, loss_fn in enumerate(self.loss):
-            out_loss = loss_fn(targets[i], outs[i])
-            output_losses.append(out_loss)
-        return output_losses
+        # output_losses = []
+        # for i, loss_fn in enumerate(self.loss):
+        #     out_loss = loss_fn(targets[i], outs[i])
+        #     output_losses.append(out_loss)
+        return self.loss(targets, outs)
     
     @tf.function
     def calculate_gradients(self, inputs, targets):
         with tf.GradientTape() as tape:
             loss_values = self.calculate_loss(inputs, targets, training=True)
-        return loss_values, tape.gradient(loss_values, self.model.trainable_variables)
+            scaled_loss = self.optimizer.get_scaled_loss(loss_values)
+            scaled_grads = tape.gradient(scaled_loss, self.model.trainable_variables)
+            gradients = self.optimizer.get_unscaled_gradients(scaled_grads)
+        return loss_values, gradients
     
     @tf.function          
     def apply_gradients(self):
@@ -89,12 +98,12 @@ class TrainLoop:
             tf.summary.scalar(name='loss', data=train_loss, step=step)
         with self.val_logger.as_default():
             tf.summary.scalar(name='mIoU', data=val_metric, step=step)
-        
+    
     def train(self, train_dataset, val_dataset, epochs):
         for epoch in range(1, epochs+1):
             # Training
             pbar = tqdm(total=len(train_dataset), desc=f"Train | Epoch {epoch}/{epochs}")
-            mean_loss = np.nan
+            epoch_loss_avg = tf.keras.metrics.Mean()
             # NOTE: step_num doesn't update if it's a class attribute, so it's here.
             for step_num, (inputs, targets) in enumerate(train_dataset):
                 # NOTE: precalculating perform_update here speeds up self.step ALOT
@@ -103,8 +112,8 @@ class TrainLoop:
                 loss_values = self.step(inputs, targets, perform_update)
                 #TODO: use sliding weighted mean for current displayed loss
                 total_loss = tf.math.reduce_sum(loss_values)
-                mean_loss = np.nanmean(np.vstack([total_loss, mean_loss]))
-                pbar.set_postfix_str(f"Total loss: {total_loss:.3f}")
+                epoch_loss_avg(total_loss)
+                pbar.set_postfix_str("Total loss: {}".format(epoch_loss_avg.result()))
                 pbar.update(1)
             pbar.close()
             
@@ -137,8 +146,8 @@ class TrainLoop:
                 self.best_val = total_miou
                 self.model.save_weights(self.checkpoint_path.format(epoch=epoch, metric=total_miou))
             
-            # End epoch
-            self.write_logs(mean_loss, mean_val_score, epoch)
+            # # End epoch
+            self.write_logs(epoch_loss_avg.result(), mean_val_score, epoch)
             self.grad_accum.reset()
             train_dataset.on_epoch_end()
             val_dataset.on_epoch_end()
@@ -165,7 +174,7 @@ def main():
     input_channels = 3 + args.stacked_channels
     accum_steps = args.accum_steps
     optimizer = Adam(lr=args.learning_rate)
-    loss_list = [make_loss('bce_dice')]
+    loss_fn = make_loss('bce_dice')
     model = make_model(
         (None, None, input_channels), 
         network=args.network, 
@@ -214,7 +223,7 @@ def main():
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
 
     # Set up training
-    train_loop = TrainLoop(model, optimizer, loss_list, log_dir, best_model_file, accum_steps)
+    train_loop = TrainLoop(model, optimizer, loss_fn, log_dir, best_model_file, accum_steps)
     train_generator = DataGeneratorSingleOutput(
         train_df,
         classes=class_names,

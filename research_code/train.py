@@ -2,7 +2,9 @@ import os
 
 import pandas as pd
 import tensorflow as tf
-
+import tensorflow.keras.mixed_precision.experimental as mixed_precision
+policy = mixed_precision.Policy('mixed_float16')
+mixed_precision.set_policy(policy)
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
 from research_code.data_generator import DataGeneratorSingleOutput

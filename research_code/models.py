@@ -311,7 +311,9 @@ def csse_resnet50_fpn(input_shape, channels=1, activation="sigmoid", coord_conv=
     x = conv_relu(x, 64, 3, (1, 1), name="up5_conv2")
     if coord_conv:
         x = CoordinateChannel2D()(x)
-    x = Conv2D(channels, (1, 1), activation=activation, name="mask")(x)
+    x = Conv2D(channels, (1, 1), name="mask")(x)
+    outputs = Activation(activation, dtype='float32', name='predictions')(x)
+
     model = Model(resnet_base.input, x)
     return model
 
@@ -412,7 +414,8 @@ def csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid"):
     x = UpSampling2D()(x)
     x = conv_relu(x, 64, 3, (1, 1), name="up5_conv1")
     x = conv_relu(x, 64, 3, (1, 1), name="up5_conv2")
-    x = Conv2D(channels, (1, 1), activation=activation, name="mask")(x)
+    x = Conv2D(channels, (1, 1), name="mask")(x)
+    x = Activation(activation, dtype='float32', name='predictions')(x)
 
     model = Model(resnet_base.input, x)
 
