@@ -1,6 +1,8 @@
 import argparse
 import logging
 import os
+from copy import deepcopy
+
 import tensorflow as tf
 import numpy as np
 import pandas as pd
@@ -16,7 +18,8 @@ from research_code.evaluate import m_iou, compute_confusion_matrix
 tf.get_logger().setLevel(logging.INFO)
 
 CLASSES = args.class_names
-CLASSES_bg = args.class_names.copy().append("background")
+CLASSES_bg = deepcopy(args.class_names)
+CLASSES_bg.append('background')
 
 class TrainLoop:
     # TODO: Add callback support
@@ -118,17 +121,14 @@ class TrainLoop:
                 output_bg = ~np.logical_or.reduce(outputs, axis=-1)
                 outputs = np.dstack([outputs, output_bg])
                 
-                targets_stacked = tf.nest.flatten(targets)
-                targets_stacked = np.dstack(targets_stacked)
-                targets_stacked = targets_stacked[0]
                 # Calculate validation metric
-                conf = compute_confusion_matrix(outputs, targets_stacked, len(CLASSES_bg))
+                conf = compute_confusion_matrix(outputs, targets[0], len(CLASSES_bg))
                 #TODO: use sliding weighted mean for current displayed metric
                 mean_conf = np.nanmean(np.dstack([mean_conf, conf]), axis=-1)
                 pbar.update(1)
             pbar.close()
             
-            total_miou, perclass_miou = m_iou(conf, CLASSES)
+            total_miou, perclass_miou = m_iou(conf, CLASSES_bg)
             mean_val_score = np.mean(total_miou)
             tf.print(f"Total: {total_miou}")
             tf.print(perclass_miou)
