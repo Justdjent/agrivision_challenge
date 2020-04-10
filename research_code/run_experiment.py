@@ -111,7 +111,7 @@ def run_experiment():
     if 'background' in classes:
         classes.remove('background')
     for ds_part, ds_dir in zip(['train', 'val'], [args.train_dir, args.val_dir]):
-        df = dataset_df[dataset_df["ds_part"] == ds_part]
+        df = dataset_df
         precompute_background_class(ds_dir, df, classes)
         generate_lightness(ds_dir, df)
         generate_ndvi(ds_dir, df)
