@@ -50,7 +50,7 @@ arg('--use_aug', action='store_true')
 arg('--activation', default='sigmoid', choices=['sigmoid', 'softmax'])
 arg('--add_classification_head', action='store_true')
 arg('--cls_head_loss_weight', '-cw', default=0.2)
-
 arg('--channels', nargs='+', default=['r', 'g', 'b', 'nir', 'ndvi', 'ndwi', 'l'])
+arg('--use_oversampling', action='store_true')
 
 args = parser.parse_args()

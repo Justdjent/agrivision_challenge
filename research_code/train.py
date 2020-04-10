@@ -137,7 +137,8 @@ def train():
         do_aug=args.use_aug,
         validate_pixels=True,
         activation=activation,
-        channels=args.channels
+        channels=args.channels,
+        use_oversampling=args.use_oversampling
     )
 
     val_generator = generator_class(
@@ -151,7 +152,8 @@ def train():
         do_aug=False,
         validate_pixels=True,
         activation=activation,
-        channels=args.channels
+        channels=args.channels,
+        use_oversampling=False
     )
 
     best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
@@ -167,12 +169,12 @@ def train():
 
     model.fit_generator(
         generator=train_generator,
-        steps_per_epoch=len(train_df) / args.batch_size + 1,
+        steps_per_epoch=len(train_generator),
         epochs=args.epochs,
         validation_data=val_generator,
-        validation_steps=len(val_df) / args.batch_size + 1,
+        validation_steps=len(val_generator),
         callbacks=callbacks,
-        max_queue_size=4,
+        max_queue_size=8,
         workers=2)
 
     del model

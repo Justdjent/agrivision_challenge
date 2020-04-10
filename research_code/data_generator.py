@@ -1,6 +1,5 @@
 import os
-from collections import defaultdict
-
+import keras
 import cv2
 
 import numpy as np
@@ -11,7 +10,8 @@ from typing import List
 from collections import defaultdict
 from keras_applications import imagenet_utils
 from sklearn.utils import shuffle as skl_shuffle
-import albumentations as albu
+from imblearn.keras import BalancedBatchGenerator
+from imblearn.over_sampling import RandomOverSampler
 
 
 def reshape(reshape_size=(512, 512)):
@@ -97,6 +97,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
             reshape_size=None,
             crop_size=None,
             do_aug=False,
+            use_oversampling=False
     ):
         "Initialization"
         self.dataset_df = dataset_df
@@ -109,19 +110,50 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         self.do_aug = do_aug
         self.aug = strong_aug(crop_size)
         self.reshape_func = reshape(reshape_size)
-
+        self.use_oversampling = use_oversampling
+        self.index_generator = None
+        self.single_class_samples = None
+        if self.use_oversampling:
+            # added in case only part of dataframe is used and indexes should be reset for proper indexing
+            self.dataset_df = self.dataset_df.reset_index()
         self.on_epoch_end()
 
     def __len__(self):
         """Denotes the number of batches per epoch
         """
-        return int(np.floor(len(self.dataset_df) / self.batch_size))
+        if self.use_oversampling:
+            return len(self.index_generator)
+        else:
+            return int(np.floor(len(self.dataset_df) / self.batch_size))
+
+    def convert_multilabel_df_to_single_class_samples(self, df):
+        pick_class_df = df.copy()
+        pick_class_df[self.classes] = (pick_class_df[self.classes] != 0).astype(int)
+        total_classes_df = pick_class_df[self.classes].sum().sort_values(ascending=True)
+        total_classes_df = total_classes_df.reset_index().set_index("index")
+        for class_name in self.classes:
+            class_prior = len(self.classes) - np.where(total_classes_df.index.values == class_name)[0][0]
+            pick_class_df[class_name] *= class_prior
+        samples = pick_class_df[self.classes].max(axis=1)
+        return samples
+
+    def get_classes_indices(self, samples):
+        img_classes = keras.utils.to_categorical(samples.values - 1, len(self.classes))
+        indices = samples.index.values.reshape(-1, 1)
+        return img_classes, indices
+
+    def sample_data(self, index):
+        if self.use_oversampling:
+            indices, classes = self.index_generator[index]
+            indices = np.squeeze(indices)
+            return self.dataset_df.iloc[indices]
+        else:
+            return self.dataset_df[index * self.batch_size: (index + 1) * self.batch_size]
 
     def __getitem__(self, index):
         """Generate one batch of data
         """
-        # Generate indexes of the batch
-        batch_data = self.dataset_df[index * self.batch_size: (index + 1) * self.batch_size]
+        batch_data = self.sample_data(index)
 
         # Generate data
         X, y = self._data_generation(batch_data)
@@ -131,8 +163,17 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
     def on_epoch_end(self):
         """Shuffle the dataset on epoch end
         """
-        if self.shuffle == True:
-            skl_shuffle(self.dataset_df)
+        if self.use_oversampling:
+            if self.single_class_samples is None:
+                self.single_class_samples = self.convert_multilabel_df_to_single_class_samples(self.dataset_df)
+            self.single_class_samples = skl_shuffle(self.single_class_samples)
+            img_classes, indices = self.get_classes_indices(self.single_class_samples)
+            sampler = RandomOverSampler(sampling_strategy='not majority')
+            self.index_generator = BalancedBatchGenerator(indices, img_classes, sampler=sampler,
+                                                          batch_size=self.batch_size,
+                                                          random_state=42)
+        elif self.shuffle:
+            self.dataset_df = skl_shuffle(self.dataset_df)
 
     def read_masks_borders(self, name):
         border_path = os.path.join(
@@ -212,16 +253,17 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
                  do_aug=False,
                  activation=None,
                  validate_pixels=True,
-                 channels=None):
+                 channels=None,
+                 use_oversampling=False):
         'Initialization'
-        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug)
+        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug,
+                         use_oversampling)
 
         if activation is None:
             raise ValueError("Please pick activation function!")
         self.activation = activation
         self.validate_pixels = validate_pixels
         self.channels = channels
-        self.on_epoch_end()
 
     def _data_generation(self, list_IDs_temp):
         'Generates data containing batch_size samples'  # X : (n_samples, *dim, n_channels)
@@ -294,10 +336,11 @@ class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
                  do_aug=False,
                  activation=None,
                  validate_pixels=True,
-                 channels=None):
+                 channels=None,
+                 use_oversampling=False):
         'Initialization'
         super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug, activation,
-                         validate_pixels, channels)
+                         validate_pixels, channels, use_oversampling)
 
     def _data_generation(self, list_IDs_temp):
         'Generates data containing batch_size samples'
