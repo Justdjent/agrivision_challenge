@@ -11,7 +11,7 @@ from research_code.train import train
 from research_code.predict_masks import predict
 from research_code.evaluate import evaluate
 from research_code.utils import calculate_ndvi, calculate_ndwi, calculate_lightness
-
+from research_code.generate_submission import generate_submission
 
 def find_best_model(model_dir):
     min_loss = 10e+5
@@ -106,6 +106,7 @@ def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_name
 
 def run_experiment():
     dataset_df = pd.read_csv(args.dataset_df)
+    test_df = pd.read_csv(args.test_df)
     classes = list(args.class_names)
     if 'background' in classes:
         classes.remove('background')
@@ -115,6 +116,10 @@ def run_experiment():
         generate_lightness(ds_dir, df)
         generate_ndvi(ds_dir, df)
         generate_ndwi(ds_dir, df)
+
+    generate_lightness(args.test_dir, test_df)
+    generate_ndvi(args.test_dir, test_df)
+    generate_ndwi(args.test_dir, test_df)
 
     experiment_dir, model_dir, experiment_name = train()
     prediction_dir = os.path.join(experiment_dir, "predictions")
@@ -138,7 +143,8 @@ def run_experiment():
              test_df_path=test_df_path,
              threshold=args.threshold,
              class_names=args.class_names)
-
+    print(f"Creating submission using {best_model_name}")
+    generate_submission(weights_path, args.threshold)
 
 if __name__ == "__main__":
     run_experiment()
