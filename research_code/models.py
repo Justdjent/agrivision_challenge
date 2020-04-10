@@ -17,7 +17,7 @@ from research_code.sel_models.unets import (create_pyramid_features, conv_relu, 
                                             decoder_block_no_bn)
 import numpy as np
 from research_code.coord_conv import CoordinateChannel2D
-
+from research_code.data_generator import HEAD_CHANNELS
 COORD_CONV_SETTING = True
 
 
@@ -539,26 +539,30 @@ def csse_resnet50_fpn_multi_corr_3heads(input_shape, channels=1, activation="sig
 
     P1, P2, P3, P4, P5 = create_pyramid_features(conv1, conv2, conv3, conv4, conv5)
 
+    name_channels = {k:len(v) for k, v in HEAD_CHANNELS.items()}
+    # name_channels = {'cloud_shadow': 1,
+    #                  'standing_water': 1,
+    #                  'plants': 2,
+    #                  'weed_waterway': 2}
     # cloudhead
-    cloud_x = seg_head_fpn(conv1, activation, 1, P1, P2, P3, P4, P5, 'cloud_shadow')
-    standing_water_x = seg_head_fpn(conv1, activation, 1, P1, P2, P3, P4, P5, 'standing_water')
-    plants_x = seg_head_fpn(conv1, activation, 2, P1, P2, P3, P4, P5, 'plants')
-    weed_waterway_x = seg_head_fpn(conv1, activation, 2, P1, P2, P3, P4, P5, 'weed_waterway')
+    outputs = {}
+    for name, num_ch in name_channels.items():
+        outputs[name] = seg_head_fpn(conv1, activation, num_ch, P1, P2, P3, P4, P5, name)
 
-    model = Model(resnet_base.input, [cloud_x, standing_water_x, plants_x, weed_waterway_x])
+    model = Model(resnet_base.input, outputs)
 
     return model
 
 def seg_head_fpn(conv1, activation, channels, P1, P2, P3, P4, P5, name):
     x = concatenate(
         [
-            csse_block(prediction_fpn_block(P5, "P5", (8, 8)), "csse_P5"),
-            csse_block(prediction_fpn_block(P4, "P4", (4, 4)), "csse_P4"),
-            csse_block(prediction_fpn_block(P3, "P3", (2, 2)), "csse_P3"),
-            csse_block(prediction_fpn_block(P2, "P2"), "csse_P2"),
+            csse_block(prediction_fpn_block(P5, "P5_{}".format(name), (8, 8)), "csse_P5_{}".format(name)),
+            csse_block(prediction_fpn_block(P4, "P4_{}".format(name), (4, 4)), "csse_P4_{}".format(name)),
+            csse_block(prediction_fpn_block(P3, "P3_{}".format(name), (2, 2)), "csse_P3_{}".format(name)),
+            csse_block(prediction_fpn_block(P2, "P2_{}".format(name)), "csse_P2_{}".format(name)),
         ]
     )
-    x = conv_bn_relu(x, 256, 3, (1, 1), name="aggregation")
+    x = conv_bn_relu(x, 256, 3, (1, 1), name="aggregation_{}".format(name))
     x = decoder_block_no_bn(x, 128, conv1, 'up4_{}'.format(name))
     x = UpSampling2D()(x)
     x = conv_relu(x, 64, 3, (1, 1), name="up5_conv1_{}".format(name))
@@ -1069,6 +1073,15 @@ def get_traj_conv_lstm(img_input_shape, point_input_shape):
     # prediction = Dense(32*32+1, activation='softmax', name='point_pred')(flat_features)
     model = Model([img_input, point_input], prediction)
     return model
+
+
+def add_classification_head_single(segmentation_model, encoder_output_name, channels):
+    encoder_output = segmentation_model.get_layer(encoder_output_name).output
+    x = GlobalAveragePooling2D(name="avg_pool_classification_head")(encoder_output)
+    classes = Dense(channels, activation='sigmoid', name='classification')(x)
+    final_model = Model(inputs=[segmentation_model.input],
+                        outputs=[segmentation_model.output, classes])
+    return final_model
 
 
 def add_classification_head(segmentation_model, encoder_output_name, channels):

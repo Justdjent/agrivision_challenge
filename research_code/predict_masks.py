@@ -13,6 +13,8 @@ from research_code.params import args
 from research_code.models import make_model
 from keras.applications import imagenet_utils
 #from tensorflow.image import flip_left_right
+# from research_code.data_generator import HEAD_CHANNELS
+from research_code.data_generator import HEAD_CHANNELS
 
 
 def setup_env():
@@ -79,6 +81,7 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
     nbr_test_samples = len(test_df)
+
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
         x = read_channels(input_channels, row["name"], test_data_dir)
         x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
@@ -99,10 +102,66 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
     tf.keras.backend.clear_session()
 
 
+def predict_multihead(experiment_dir: str, class_names: List[str], weights_path: str, test_df_path: str, test_data_dir: str,
+            input_channels: List[str], network: str, add_classification_head: bool):
+    """
+        Runs model on the validation data and stores predictions in the output folder
+        :param experiment_dir: Directory of the experiment. The results will be save there in 'predictions' directory
+        :param class_names: Array of class names
+        :param weights_path: Path to .h5 file where model's weights are stored
+        :param test_df_path: Path to dataframe with data about test set
+        :param test_data_dir: Path to directory with images, boundaries, masks and ground truth of the test
+        :param input_channels: List of channels to be used
+        :param network: Name of the used model architecture
+        :param add_classification_head: Flag if model was trained with additional head for classification task
+        :return:
+    """
+
+    output_dir = os.path.join(experiment_dir, "predictions")
+    os.makedirs(output_dir, exist_ok=True)
+    model = make_model((None, None, len(input_channels)),
+                       network=network,
+                       channels=len(args.class_names),
+                       activation=args.activation,
+                       add_classification_head=args.add_classification_head,
+                       classes=args.class_names)
+    model.load_weights(weights_path)
+    test_df = pd.read_csv(test_df_path)
+    test_df = test_df[test_df['ds_part'] == 'val']
+
+    nbr_test_samples = len(test_df)
+
+    for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
+        x = read_channels(input_channels, row["name"], test_data_dir)
+        x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
+        x = np.expand_dims(x, axis=0)
+        preds = model.predict(x)
+        prediction_dict = {name: pred for name, pred in zip(model.output_names, preds)}
+        for head, preds in prediction_dict.items():
+        # for num, (head, class_names) in enumerate(HEAD_CHANNELS.items()):
+            class_names = HEAD_CHANNELS.get(head)
+            if not isinstance(class_names, list):
+                print(head)
+                continue
+            for ind in range(len(class_names)):
+                bin_mask = (preds[0, :, :, ind] * 255).astype(np.uint8)
+                cur_class = class_names[ind]
+                filename = row['name']
+                save_folder_masks = os.path.join(output_dir, cur_class)
+                os.makedirs(save_folder_masks, exist_ok=True)
+                save_path_masks = os.path.join(save_folder_masks, filename)
+                cv2.imwrite(save_path_masks, bin_mask)
+    del model
+    tf.keras.backend.clear_session()
+
+
 if __name__ == '__main__':
     setup_env()
+    pred_function = predict
 
-    predict(experiment_dir=args.experiments_dir,
+    if args.multihead:
+        pred_function = predict_multihead
+    pred_function(experiment_dir=args.experiments_dir,
             class_names=args.class_names,
             weights_path=args.weights,
             test_df_path=args.dataset_df,

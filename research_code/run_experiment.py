@@ -8,7 +8,7 @@ from tqdm import tqdm
 from typing import List
 from research_code.params import args
 from research_code.train import train
-from research_code.predict_masks import predict
+from research_code.predict_masks import predict, predict_multihead
 from research_code.evaluate import evaluate
 from research_code.predict_masks_submission import generate_submission
 from research_code.utils import calculate_ndvi, calculate_ndwi, calculate_lightness
@@ -26,16 +26,22 @@ def find_best_model(model_dir):
     return best_model_name
 
 
-def generate_ndvi(img_dir: str, input_df: pd.DataFrame):
+def generate_ndvi(img_dir: str):
     ndvi_dir_path = os.path.join(img_dir, "images", "ndvi")
+    rgb_dir = os.path.join(img_dir, "images", "rgb")
+    rgb_images = os.listdir(rgb_dir)
     if os.path.exists(ndvi_dir_path):
-        print("NDVI has been precomputed. Skipping NDVI computation")
-        return
-    else:
-        print("Precomputing NDVI channel")
-        os.makedirs(ndvi_dir_path)
-    for idx, row in tqdm(input_df.iterrows(), total=len(input_df)):
-        filename = row["name"]
+        ndvi_images = os.listdir(ndvi_dir_path)
+        if len(ndvi_images) == len(rgb_images):
+            print("NDVI has been precomputed. Skipping NDVI computation")
+            return
+        else:
+            rgb_images = set(rgb_images) - set(ndvi_images)
+    print("Precomputing NDVI channel")
+    os.makedirs(ndvi_dir_path, exist_ok=True)
+    for filename in tqdm(rgb_images, total=len(rgb_images)):
+        if not filename.endswith(".jpg"):
+            continue
         rgb_path = os.path.join(img_dir, "images", "rgb", filename)
         nir_path = os.path.join(img_dir, "images", "nir", filename)
         ndvi_path = os.path.join(ndvi_dir_path, filename)
@@ -45,16 +51,22 @@ def generate_ndvi(img_dir: str, input_df: pd.DataFrame):
         cv2.imwrite(ndvi_path, ndvi)
 
 
-def generate_ndwi(img_dir: str, input_df: pd.DataFrame):
+def generate_ndwi(img_dir: str):
     ndwi_dir_path = os.path.join(img_dir, "images", "ndwi")
+    rgb_dir = os.path.join(img_dir, "images", "rgb")
+    rgb_images = os.listdir(rgb_dir)
     if os.path.exists(ndwi_dir_path):
-        print("NDWI has been precomputed. Skipping NDWI computation")
-        return
-    else:
-        print("Precomputing NDWI channel")
-        os.makedirs(ndwi_dir_path)
-    for idx, row in tqdm(input_df.iterrows(), total=len(input_df)):
-        filename = row["name"]
+        ndwi_images = os.listdir(ndwi_dir_path)
+        if len(ndwi_images) == len(rgb_images):
+            print("NDVI has been precomputed. Skipping NDVI computation")
+            return
+        else:
+            rgb_images = set(rgb_images) - set(ndwi_images)
+    print("Precomputing NDWI channel")
+    os.makedirs(ndwi_dir_path, exist_ok=True)
+    for filename in tqdm(rgb_images, total=len(rgb_images)):
+        if not filename.endswith(".jpg"):
+            continue
         rgb_path = os.path.join(img_dir, "images", "rgb", filename)
         nir_path = os.path.join(img_dir, "images", "nir", filename)
         ndwi_path = os.path.join(ndwi_dir_path, filename)
@@ -64,16 +76,22 @@ def generate_ndwi(img_dir: str, input_df: pd.DataFrame):
         cv2.imwrite(ndwi_path, ndwi)
 
 
-def generate_lightness(img_dir: str, input_df: pd.DataFrame):
+def generate_lightness(img_dir: str):
     lightness_dir_path = os.path.join(img_dir, "images", "l")
+    rgb_dir = os.path.join(img_dir, "images", "rgb")
+    rgb_images = os.listdir(rgb_dir)
     if os.path.exists(lightness_dir_path):
-        print("Lightness has been precomputed. Skipping lightness computation")
-        return
-    else:
-        print("Precomputing lightness channel")
-        os.makedirs(lightness_dir_path)
-    for idx, row in tqdm(input_df.iterrows(), total=len(input_df)):
-        filename = row["name"]
+        lightness_images = os.listdir(lightness_dir_path)
+        if len(lightness_images) == len(rgb_images):
+            print("NDVI has been precomputed. Skipping NDVI computation")
+            return
+        else:
+            rgb_images = set(rgb_images) - set(lightness_images)
+    print("Precomputing lightness channel")
+    os.makedirs(lightness_dir_path, exist_ok=True)
+    for filename in tqdm(rgb_images, total=len(rgb_images)):
+        if not filename.endswith(".jpg"):
+            continue
         rgb_path = os.path.join(img_dir, "images", "rgb", filename)
         lightness_path = os.path.join(lightness_dir_path, filename)
         rgb_img = cv2.cvtColor(cv2.imread(rgb_path), cv2.COLOR_BGR2RGB)
@@ -81,21 +99,30 @@ def generate_lightness(img_dir: str, input_df: pd.DataFrame):
         cv2.imwrite(lightness_path, ndwi)
 
 
-def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_names: List[str]):
+def precompute_background_class(test_dir: str, class_names: List[str]):
     background_class_path = os.path.join(test_dir, "labels", "background")
+    rgb_dir = os.path.join(test_dir, "images", "rgb")
+    rgb_images = os.listdir(rgb_dir)
     if os.path.exists(background_class_path):
-        print("Background class has been precomputed. Skipping background class computation")
-        return
-    else:
-        print("Precomputing background class ground truth")
-        os.makedirs(background_class_path)
+        background_images = os.listdir(background_class_path)
+        background_images = [bg_img.replace(".png", ".jpg") for bg_img in background_images]
+        if len(background_images) == len(rgb_images):
+            print("background has been precomputed. Skipping background computation")
+            return
+        else:
+            rgb_images = set(rgb_images) - set(background_images)
+    print("Precomputing background class ground truth")
+    os.makedirs(background_class_path, exist_ok=True)
 
-    for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
-        filename = row['name']
+    for filename in tqdm(rgb_images, total=len(rgb_images)):
+        if not filename.endswith(".jpg"):
+            continue
         background_ground_truth = None
         for class_idx, class_name in enumerate(class_names):
             ground_truth_path = os.path.join(test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
             ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
+            if not isinstance(ground_truth, np.ndarray):
+                print(ground_truth_path)
             ground_truth = (ground_truth / 255)
             if background_ground_truth is None:
                 background_ground_truth = np.zeros(ground_truth.shape)
@@ -110,12 +137,13 @@ def run_experiment():
     classes = list(args.class_names)
     if 'background' in classes:
         classes.remove('background')
-    for ds_part, ds_dir in zip(['train', 'val'], [args.train_dir, args.val_dir]):
-        df = dataset_df
-        precompute_background_class(ds_dir, df, classes)
-        generate_lightness(ds_dir, df)
-        generate_ndvi(ds_dir, df)
-        generate_ndwi(ds_dir, df)
+    for num, ds_dir in enumerate([args.train_dir, args.val_dir, args.test_dir]):
+
+        generate_lightness(ds_dir)
+        generate_ndvi(ds_dir)
+        generate_ndwi(ds_dir)
+        if num != 2:
+            precompute_background_class(ds_dir, classes)
 
     experiment_dir, model_dir, experiment_name = train()
     prediction_dir = os.path.join(experiment_dir, "predictions")
@@ -125,7 +153,11 @@ def run_experiment():
     test_df_path = args.dataset_df
     test_data_dir = args.val_dir
     print(f"Starting prediction process. Using {best_model_name} for prediction")
-    predict(experiment_dir=experiment_dir,
+    pred_function = predict
+
+    if args.multihead:
+        pred_function = predict_multihead
+    pred_function(experiment_dir=experiment_dir,
             class_names=args.class_names,
             weights_path=weights_path,
             test_df_path=test_df_path,

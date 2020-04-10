@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
-from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorClassificationHead
+from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorMultiheadOutput, DataGeneratorClassificationHead, DataGeneratorClassificationHeadMulti
 from research_code.losses import make_loss, dice_coef, dice_without_background
 from research_code.models import make_model
 from research_code.params import args
@@ -84,7 +84,10 @@ def train():
         metrics = {}
         loss_weights = {}
         # get names of output layers in order to create dict with metrics/losses
-        output_names = [layer.name.split('/')[0] for layer in model.output]
+        print(model.output)
+        output_names = [layer.name.split('/')[0] for layer in model.output if not isinstance(layer, dict)]
+        for head, tensor in model.output[0].items():
+            output_names.append(head)
         for name in output_names:
             if name == "classification":
                 losses[name] = make_loss('crossentropy')
@@ -99,9 +102,15 @@ def train():
         loss_list = losses
         metrics_list = metrics
     if args.add_classification_head:
-        generator_class = DataGeneratorClassificationHead
+        if args.multihead:
+            generator_class = DataGeneratorClassificationHeadMulti
+        else:
+            generator_class = DataGeneratorClassificationHead
     else:
-        generator_class = DataGeneratorSingleOutput
+        if args.multihead:
+            generator_class = DataGeneratorMultiheadOutput
+        else:
+            generator_class = DataGeneratorSingleOutput
 
     model.compile(loss=loss_list,
                   optimizer=optimizer,
@@ -125,8 +134,9 @@ def train():
         dataset_df = dataset_df[~dataset_df['invalid']]
     print("Total df size {} after cleaning".format(len(dataset_df)))
     train_df = dataset_df[dataset_df["ds_part"] == "train"]
-    
+
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
+
     print('{} in train_ids, {} in val_ids, total {}'.format(len(train_df), len(val_df), len(train_df) + len(val_df)))
 
     train_generator = generator_class(

@@ -14,11 +14,18 @@ tqdm.monitor_interval = 0
 from collections import OrderedDict
 
 # from research_code.random_transform_mask import pad_size, unpad
-from research_code.utils import calculate_ndvi
+#from research_code.utils import calculate_ndvi
+from research_code.data_generator import read_channels
+from research_code.data_generator import HEAD_CHANNELS
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 # prediction_dir = args.pred_mask_dir
-
+SUBMISSION_NUMS = {'cloud_shadow': 1,
+                   'double_plant': 2,
+                   'planter_skip': 3,
+                   'standing_water': 4,
+                   'waterway': 5,
+                   'weed_cluster': 6}
 
 def do_tta(x, tta_type):
     if tta_type == 'hflip':
@@ -61,43 +68,25 @@ def generate_submission(thresh, weights_path):
     nbr_test_samples = len(test_images_list)
 
     pbar = tqdm()
-    class_ious = {cls: [] for cls in class_names}
-    for i in tqdm(range(int(nbr_test_samples / batch_size)), total=nbr_test_samples):
-        img_sizes = []
+    for idx in range(nbr_test_samples):
+        img_name = test_images_list[idx]
+        x = read_channels(args.channels, img_name, args.test_dir)
+        x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
+        x = np.expand_dims(x, axis=0)
+        preds = model.predict(x)
+        prediction_dict = {name: pred for name, pred in zip(model.output_names, preds)}
 
-        for j in range(batch_size):
-            if i * batch_size + j < nbr_test_samples:
-                class_labels = {}
-                img_name = test_images_list[i * batch_size + j]
-                img_path = os.path.join(args.test_dir, "images", "rgb", img_name)
-                nir_img_path = os.path.join(args.test_dir, 'images', "nir", img_name)
-                nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
-                img = cv2.imread(img_path)
-                red = img[:, :, -1]
-                nir_img = calculate_ndvi(red=red, nir_img=nir_img)
-                nir_img = np.expand_dims(nir_img, axis=-1)
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = np.concatenate([img, nir_img], axis=-1)
-                # img = nir_img
-                # img, pads = pad_size(img)
-        x = np.expand_dims(img, axis=0)
-        x = imagenet_utils.preprocess_input(x,  'channels_last', mode='tf')
-        # batch_x = x
-        if args.add_classification_head:
-            preds, _ = model.predict(x)
-        else:
-            preds = model.predict(x)
-        # preds = model.predict_on_batch(batch_x)
-        mixed_prediction = np.zeros((img.shape[0], img.shape[1]))
-        #for num, pred in enumerate(preds):
-        for num in range(len(class_names)):
-            # print(pred.max())
-            bin_mask = (preds[0, :, :, num] * 255).astype(np.uint8)
-            # print(bin_mask.max())
-            bin_mask = bin_mask > (thresh * 255)
-            mixed_prediction[bin_mask] = num + 1
-            # print(np.unique(mixed_prediction))
-        # os.makedirs(output_dir, exist_ok=True)
+        mixed_prediction = np.zeros((x.shape[1], x.shape[2]))
+        for head, preds in prediction_dict.items():
+            class_names = HEAD_CHANNELS.get(head)
+            if not isinstance(class_names, list):
+                # print(head)
+                continue
+            for ind in range(len(class_names)):
+                bin_mask = (preds[0, :, :, ind] * 255).astype(np.uint8)
+                bin_mask = bin_mask > (thresh * 255)
+                mixed_prediction[bin_mask] = SUBMISSION_NUMS.get(class_names[ind])
+
         save_path_masks = os.path.join(output_dir, img_name.replace(".jpg", ".png"))
         cv2.imwrite(save_path_masks, mixed_prediction)
         pbar.update(1)
