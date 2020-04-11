@@ -1,7 +1,7 @@
 import tensorflow.keras.backend as K
-# from tensorflow.keras.backend import _to_tensor
 from tensorflow.keras.losses import binary_crossentropy, mean_squared_error, mean_absolute_error
 import tensorflow as tf
+from tensorflow_addons.losses import SigmoidFocalCrossEntropy
 
 
 def angle_rmse(pred, labels):
@@ -19,6 +19,7 @@ def angle_rmse(pred, labels):
     score = tf.reduce_mean(score, axis=1)
     return score
 
+
 def lstm_rmse(pred, labels):
     # calculate mask
     pred = tf.cast(tf.argmax(pred, axis=-1), tf.float32)
@@ -33,6 +34,7 @@ def lstm_rmse(pred, labels):
     score = tf.math.sqrt(mean_squared_error(y_pred=pred, y_true=labels))
     score = tf.reduce_mean(score, axis=1)
     return score
+
 
 def kld_loss_masked(labels, predictions):
     mask = tf.cast(tf.not_equal(tf.reduce_sum(labels, axis=-1), 0), tf.float64)
@@ -54,6 +56,31 @@ def dice_coef(y_true, y_pred, smooth=1.0):
     y_pred_f = K.flatten(y_pred)
     intersection = K.sum(y_true_f * y_pred_f)
     return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
+
+
+def dice_without_background(y_true, y_pred, smooth=1e-7):
+    y_true_f = K.flatten(y_true[..., :-1])
+    y_pred_f = K.flatten(y_pred[..., :-1])
+    intersection = K.sum(y_true_f * y_pred_f)
+    denominator = K.sum(y_true_f + y_pred_f)
+    return (2. * intersection + smooth) / (denominator + smooth)
+
+
+def dice_loss_without_background(y_true, y_pred):
+    return 1 - dice_without_background(y_true, y_pred)
+
+
+def bce_dice_softmax(y_true, y_pred):
+    return tf.keras.losses.CategoricalCrossentropy()(y_true, y_pred) + dice_loss_without_background(y_true, y_pred)
+
+
+def cce_dice(y_true, y_pred, label_smoothing=0.2, cce=0.2, dice=0.8):
+    return tf.keras.losses.CategoricalCrossentropy(label_smoothing)(y_true, y_pred) * cce + \
+           dice_coef(y_true, y_pred) * dice
+
+
+def focal_dice_loss(y_true, y_pred, focal=0.2, dice=0.8):
+    return SigmoidFocalCrossEntropy()(y_true, y_pred) * focal + dice_coef(y_true, y_pred) * dice
 
 
 def bootstrapped_crossentropy(y_true, y_pred, bootstrap_type='hard', alpha=0.95):
@@ -82,11 +109,11 @@ def wing_loss(landmarks, labels, w=10.0, epsilon=2.0):
     """
     with tf.name_scope('wing_loss'):
         x = landmarks - labels
-        c = w * (1.0 - tf.math.log(1.0 + w/epsilon))
+        c = w * (1.0 - tf.math.log(1.0 + w / epsilon))
         absolute_x = tf.abs(x)
         losses = tf.where(
             tf.greater(w, absolute_x),
-            w * tf.math.log(1.0 + absolute_x/epsilon),
+            w * tf.math.log(1.0 + absolute_x / epsilon),
             absolute_x - c
         )
         loss = tf.reduce_mean(tf.reduce_sum(losses, axis=[1, 2]), axis=0)
@@ -130,7 +157,7 @@ def masked_cos_loss_angle(y_true, y_pred):
     # 175 degree threshold to change loss in radians
     thresh_175 = 3.05433
     thresh_5 = 0.0872665
-    #loss = 2 * (1 - tf.math.cos(y_pred - y_true)) + 4 - 4 * (1 - tf.math.square(tf.math.cos(y_pred - y_true)))
+    # loss = 2 * (1 - tf.math.cos(y_pred - y_true)) + 4 - 4 * (1 - tf.math.square(tf.math.cos(y_pred - y_true)))
     # losses = tf.where(
     #     tf.logical_or(tf.greater(y_true, thresh_175), tf.greater(thresh_5, y_true)),
     #     4 - 4 * (1 - tf.math.square(tf.math.cos(y_pred - y_true))),
@@ -138,7 +165,7 @@ def masked_cos_loss_angle(y_true, y_pred):
     # )
     losses = 2 * (1 - tf.math.cos(y_pred - y_true))
     loss = tf.reduce_mean(tf.reduce_sum(losses, axis=[1, 2]), axis=0)
-    #loss = tf.reduce_sum(losses)
+    # loss = tf.reduce_sum(losses)
     return loss
 
 
@@ -172,6 +199,7 @@ def online_bootstrapping(y_true, y_pred, pixels=512, threshold=0.5):
 
 def dice_coef_loss_border(y_true, y_pred):
     return (1 - dice_coef_border(y_true, y_pred)) * 0.05 + 0.95 * dice_coef_loss(y_true, y_pred)
+
 
 def bce_dice_loss_border(y_true, y_pred):
     return bce_border(y_true, y_pred) * 0.05 + 0.95 * dice_coef_loss(y_true, y_pred)
@@ -262,8 +290,8 @@ def time_crossentropy(labels, pred):
     loss = 0
     for i in range(pred.shape[1]):
         loss += dice_coef_loss_bce(labels[:, i], pred[:, i], dice=0.8, bce=0.2, bootstrapping='soft', alpha=1)
-        #loss += K.sum(tf.losses.kullback_leibler_divergence(labels[:, i] > 0.02, pred[:, i]))
-        #loss += K.binary_crossentropy(labels[:, i], pred[:, i])
+        # loss += K.sum(tf.losses.kullback_leibler_divergence(labels[:, i] > 0.02, pred[:, i]))
+        # loss += K.binary_crossentropy(labels[:, i], pred[:, i])
     return loss
 
 
@@ -277,6 +305,7 @@ def make_loss(loss_name):
     elif loss_name == 'crossentropy_boot':
         def loss(y, p):
             return bootstrapped_crossentropy(y, p, 'hard', 0.9)
+
         return loss
     elif loss_name == 'dice':
         return dice_coef_loss
@@ -285,9 +314,21 @@ def make_loss(loss_name):
             return dice_coef_loss_bce(y, p, dice=0.8, bce=0.2, bootstrapping='soft', alpha=1)
 
         return loss
+    elif loss_name == 'bce_dice_softmax':
+        return bce_dice_softmax
     elif loss_name == 'boot_soft':
         def loss(y, p):
             return dice_coef_loss_bce(y, p, dice=0.8, bce=0.2, bootstrapping='soft', alpha=0.95)
+
+        return loss
+    elif loss_name == "cce_dice":
+        def loss(y, p):
+            return cce_dice(y, p, label_smoothing=0.2, cce=0.2, dice=0.8)
+
+        return loss
+    elif loss_name == "focal_dice":
+        def loss(y, p):
+            return focal_dice_loss(y, p, focal=0.2, dice=0.8)
 
         return loss
     elif loss_name == 'boot_hard':

@@ -1,15 +1,14 @@
 import os
-from collections import defaultdict
-
 import cv2
+
 import numpy as np
 import tensorflow as tf
-from keras_applications import imagenet_utils
-from sklearn.utils import shuffle as skl_shuffle
 import albumentations as albu
 
-from research_code.utils import calculate_ndvi
-
+from typing import List
+from collections import defaultdict
+from keras_applications import imagenet_utils
+from sklearn.utils import shuffle as skl_shuffle
 
 
 def reshape(reshape_size=(512, 512)):
@@ -30,6 +29,38 @@ def strong_aug(crop_size=(512, 512)):
          ], p=0.3),
         albu.RandomCrop(crop_size[0], crop_size[1], p=1),
     ], p=1)
+
+
+def read_gray_scale_img(full_img_path: str) -> np.ndarray:
+    return cv2.imread(full_img_path, cv2.IMREAD_GRAYSCALE)
+
+
+def read_channels(channels: List[str], img_name: str, img_dir: str) -> np.ndarray:
+    channel_stack = []
+    use_rgb = False
+    possible_channels = ['r', 'g', 'b', 'nir', 'ndvi', 'ndwi', 'l']
+    rgb_channels = ['r', 'g', 'b']
+    for rgb_channel in rgb_channels:
+        if rgb_channel in channels:
+            use_rgb = True
+    rgb = None
+    if use_rgb:
+        rgb_path = os.path.join(img_dir, "images", "rgb", img_name)
+        rgb = cv2.cvtColor(cv2.imread(rgb_path), cv2.COLOR_BGR2RGB)
+
+    for channel in channels:
+        if channel in possible_channels:
+            if channel in rgb_channels:
+                channel_idx = rgb_channels.index(channel)
+                channel_img = rgb[:, :, channel_idx]
+                channel_stack.append(channel_img)
+            else:
+                channel_img = read_gray_scale_img(os.path.join(img_dir, "images", channel, img_name))
+                channel_stack.append(channel_img)
+        else:
+            raise ValueError(f"Unknown channel {channel}")
+    channel_stack = np.dstack(channel_stack)
+    return channel_stack
 
 
 class DataGenerator_agrivision(tf.keras.utils.Sequence):
@@ -70,9 +101,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         """Generate one batch of data
         """
         # Generate indexes of the batch
-        batch_data = self.dataset_df[
-                     index * self.batch_size: (index + 1) * self.batch_size
-                     ]
+        batch_data = self.dataset_df[index * self.batch_size: (index + 1) * self.batch_size]
 
         # Generate data
         X, y = self._data_generation(batch_data)
@@ -89,20 +118,14 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         border_path = os.path.join(
             self.img_dir, "boundaries", name.replace(".jpg", ".png")
         )
-        border_img = cv2.imread(border_path, cv2.IMREAD_GRAYSCALE)
-        # mask_path = os.path.join(self.img_dir, "masks", name.replace(".jpg", ".png"))
-        # if os.path.exists(mask_path):
-        #     mask_img = cv2.imread(mask_path)
-        # else:
-        #     mask_img = np.ones(border_img.shape)
 
-        mask_img = border_img
+        border_img = cv2.imread(border_path, cv2.IMREAD_GRAYSCALE)
         try:
-            mask_img = mask_img > 0
+            border_img = border_img > 0
         except Exception as error:
             print(border_path)
-        mask_img = np.invert(mask_img)
-        return mask_img
+        border_img = np.invert(border_img)
+        return border_img
 
     def _data_generation(self, batch_data):
         """Generates data containing batch_size samples 
@@ -114,16 +137,12 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
 
         for ind, item_data in batch_data.iterrows():
             img_path = os.path.join(self.img_dir, "images", "rgb", item_data["name"])
-            nir_img_path = os.path.join(self.img_dir, 'images', "nir", item_data['name'])
-            nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
-            nir_img = np.expand_dims(nir_img, axis=-1)
             img = cv2.imread(img_path)
             try:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             except Exception as error:
                 print(img_path)
                 print(error)
-            img = np.concatenate([img, nir_img], axis=-1)
             not_valid_mask = self.read_masks_borders(item_data["name"])
             img[not_valid_mask] = 0
 
@@ -172,7 +191,8 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
                  crop_size=None,
                  do_aug=False,
                  activation=None,
-                 validate_pixels=True):
+                 validate_pixels=True,
+                 channels=None):
         'Initialization'
         super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug)
 
@@ -180,6 +200,7 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             raise ValueError("Please pick activation function!")
         self.activation = activation
         self.validate_pixels = validate_pixels
+        self.channels = channels
         self.on_epoch_end()
 
     def _data_generation(self, list_IDs_temp):
@@ -190,28 +211,15 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
         batch_y = []
 
         for ind, item_data in train_batch.iterrows():
-            img_path = os.path.join(self.img_dir, 'images', "rgb", item_data['name'])
-            nir_img_path = os.path.join(self.img_dir, 'images', "nir", item_data['name'])
-            nir_img = cv2.imread(nir_img_path, cv2.IMREAD_GRAYSCALE)
+            channels = read_channels(self.channels, item_data["name"], self.img_dir)
 
-            
-            img = cv2.imread(img_path)
-            red =  img[:, :, -1]
-            ndvi_img = calculate_ndvi(red, nir_img)
-            nir_img = np.expand_dims(ndvi_img, axis=-1)
-            try:
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            except Exception as error:
-                print(img_path)
-                print(error)
             if self.validate_pixels:
                 not_valid_mask = self.read_masks_borders(item_data['name'])
             else:
-                not_valid_mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.bool)
-            # img = np.concatenate([img, nir_img], axis=-1)
-            img = nir_img
-            img[not_valid_mask] = 0
-            targets = np.zeros((img.shape[0], img.shape[1], len(self.classes)))
+                not_valid_mask = np.zeros((channels.shape[0], channels.shape[1]), dtype=np.bool)
+
+            channels[not_valid_mask] = 0
+            targets = np.zeros((channels.shape[0], channels.shape[1], len(self.classes)))
             for idx, cls in enumerate(self.classes):
                 mask_path = os.path.join(self.img_dir, 'labels', cls, item_data['name'])
                 mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
@@ -219,13 +227,13 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
                 mask = mask > 0
                 targets[:, :, idx] = mask
 
-            res = self.reshape_func(image=img, mask=targets)
-            img, targets = res['image'], res['mask']
+            res = self.reshape_func(image=channels, mask=targets)
+            channels, targets = res['image'], res['mask']
             if self.do_aug:
-                res = self.aug(image=img, mask=targets)
-                img, targets = res['image'], res['mask']
+                res = self.aug(image=channels, mask=targets)
+                channels, targets = res['image'], res['mask']
             batch_y.append(targets)
-            batch_x.append(img)
+            batch_x.append(channels)
 
         batch_x = np.array(batch_x, np.float32)
         batch_y = np.array(batch_y, np.float32)
@@ -250,3 +258,31 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             batch_y = tf.one_hot(highest_score_label, len(self.classes), dtype=np.float32).numpy()
 
         return imagenet_utils.preprocess_input(batch_x, 'channels_last', mode='tf'), batch_y
+
+
+class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
+    'Generates data for Keras'
+
+    def __init__(self,
+                 dataset_df,
+                 classes,
+                 img_dir=None,
+                 batch_size=None,
+                 shuffle=False,
+                 reshape_size=None,
+                 crop_size=None,
+                 do_aug=False,
+                 activation=None,
+                 validate_pixels=True,
+                 channels=None):
+        'Initialization'
+        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug, activation,
+                         validate_pixels, channels)
+
+    def _data_generation(self, list_IDs_temp):
+        'Generates data containing batch_size samples'
+        batch_x, batch_y = super()._data_generation(list_IDs_temp)
+        classes = np.array(np.count_nonzero(batch_y, axis=(1, 2)) != 0, dtype=np.float32)
+        if 'background' in self.classes:
+            classes = classes[:, :-1]
+        return batch_x, [batch_y, classes]

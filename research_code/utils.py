@@ -1,34 +1,44 @@
-import threading
-import rasterio
 import cv2
+import json
+import rasterio
+import threading
+import rasterio.mask
+
 import numpy as np
 import geopandas as gpd
+
 from tqdm import tqdm
 import os
 import math
 from rasterio.windows import Window
-import rasterio.mask
-from shapely.ops import split as shapely_split, cascaded_union
-from shapely.geometry import Polygon, Point, MultiPoint, LineString, mapping
-import json
-import shapely
-import argparse
-# from random_transform_mask import tiles_with_overlap_shape
-from rasterio.plot import reshape_as_raster, reshape_as_image
-from rasterio import features
-import shutil
+from shapely.ops import split as shapely_split
+from shapely.geometry import Polygon, Point, MultiPoint, LineString
 
 POLYGON_WIDTH = 20
 
 
 def calculate_ndvi(red, nir_img):
     np.seterr(divide='ignore', invalid='ignore')
-    diff = nir_img.astype(np.float32)- red.astype(np.float32)
+    diff = nir_img.astype(np.float32) - red.astype(np.float32)
     nir_red = nir_img.astype(np.float32) + red.astype(np.float32)
-    ndvi_img = ((1 + diff/(nir_red + 0.00001)) * 127).astype(np.uint8)
+    ndvi_img = ((1 + diff / (nir_red + 0.00001)) * 127).astype(np.uint8)
     return ndvi_img
 
-    
+
+def calculate_ndwi(green, nir_img):
+    np.seterr(divide='ignore', invalid='ignore')
+    diff = green.astype(np.float32) - nir_img.astype(np.float32)
+    nir_green = nir_img.astype(np.float32) + green.astype(np.float32)
+    ndwi_img = ((1 + diff / nir_green) * 127.5).astype(np.uint8)
+    return ndwi_img
+
+
+def calculate_lightness(rgb_img):
+    lab = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2LAB)
+    lightness = lab[:, :, 0]
+    return lightness
+
+
 def mask_raster_with_polygon(dataset, save_path, shapes, tile_size=500, all_touched=False, invert=False,
                              crop=False, pad=False):
     shape_mask, transform, window = rasterio.mask.raster_geometry_mask(dataset,
@@ -125,13 +135,14 @@ def split_lines(multiline):
 
 
 def read_json(path):
-    #logging.info(path)
+    # logging.info(path)
     with open(path, 'r') as json_data:
         d = json.load(json_data)
     return d
 
+
 def get_azimuth_polyline(line):
-    radian = math.atan((line.coords[1][0] - line.coords[0][0])/(line.coords[1][1] - line.coords[0][1]))
+    radian = math.atan((line.coords[1][0] - line.coords[0][0]) / (line.coords[1][1] - line.coords[0][1]))
     degrees = np.rad2deg(radian)
     return degrees
 
@@ -160,6 +171,7 @@ def create_raster_list(grove_folder):
                 raster_list[channel] = {'path': path}
                 continue
     return raster_list
+
 
 def get_perpendicular(point, angle, polygon_width=POLYGON_WIDTH):
     """
@@ -193,8 +205,8 @@ def get_perpendiculars(lines, angles):
             line_shp, line_arr = get_perpendicular(inp, angle)
             perpendiculars.append(line_shp)
             point_arr.append(line_arr)
-        #polygon_shp = Polygon((point_arr[0][0], point_arr[0][1], point_arr[1][1], point_arr[1][0]))
-        #polygons.append(polygon_shp)
+        # polygon_shp = Polygon((point_arr[0][0], point_arr[0][1], point_arr[1][1], point_arr[1][0]))
+        # polygons.append(polygon_shp)
     return perpendiculars[1:-1]
 
 
@@ -205,14 +217,14 @@ def get_perpendiculars_each_n_meters(lines, angles, step=1):
         # only for second point without last
         pts = np.arange(0, line.length, step)
         for pt in pts:
-        #for i in range(1, 2):
+            # for i in range(1, 2):
             inp = line.interpolate(pt, normalized=False)
             inp = inp.coords[0]
             line_shp, line_arr = get_perpendicular(inp, angle, polygon_width=3)
             perpendiculars.append(line_shp)
             point_arr.append(line_arr)
-        #polygon_shp = Polygon((point_arr[0][0], point_arr[0][1], point_arr[1][1], point_arr[1][0]))
-        #polygons.append(polygon_shp)
+        # polygon_shp = Polygon((point_arr[0][0], point_arr[0][1], point_arr[1][1], point_arr[1][0]))
+        # polygons.append(polygon_shp)
     return perpendiculars
 
 

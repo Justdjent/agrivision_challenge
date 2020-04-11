@@ -594,22 +594,21 @@ def get_instance_unet(input_shape, channels=1, activation="sigmoid"):
 def get_instance_unet_correlation(input_shape, channels=1, activation="sigmoid"):
     max_distance = 20
     img_input = Input(input_shape)
-    #corr1 = CorrelationCost(pad=max_distance,
+    # corr1 = CorrelationCost(pad=max_distance,
     #                        kernel_size=1,
     #                        max_displacement=max_distance,
     #                        stride_1=1,
     #                        stride_2=2,
     #                        data_format="channels_last")([img_input, img_input])
-    #corr1 = np.concatenate([img_input, corr1], axis=-1)
+    # corr1 = np.concatenate([img_input, corr1], axis=-1)
     conv1 = conv_block_simple(img_input, 32, "conv1_1")
     conv1 = conv_block_simple(conv1, 32, "conv1_2")
     pool1 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool1")(conv1)
 
-
     conv2 = conv_block_simple(pool1, 64, "conv2_1")
     conv2 = conv_block_simple(conv2, 64, "conv2_2")
     pool2 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool2")(conv2)
-    #corr2 = CorrelationCost(pad=max_distance//2,
+    # corr2 = CorrelationCost(pad=max_distance//2,
     #                        kernel_size=1,
     #                        max_displacement=max_distance//2,
     #                        stride_1=1,
@@ -619,7 +618,7 @@ def get_instance_unet_correlation(input_shape, channels=1, activation="sigmoid")
     conv3 = conv_block_simple(pool2, 128, "conv3_1")
     conv3 = conv_block_simple(conv3, 128, "conv3_2")
     pool3 = MaxPooling2D((2, 2), strides=(2, 2), padding="same", name="pool3")(conv3)
-    #corr3 = CorrelationCost(pad=max_distance,
+    # corr3 = CorrelationCost(pad=max_distance,
     #                        kernel_size=1,
     #                        max_displacement=max_distance,
     #                        stride_1=1,
@@ -635,7 +634,7 @@ def get_instance_unet_correlation(input_shape, channels=1, activation="sigmoid")
                             stride_1=1,
                             stride_2=2,
                             data_format="channels_last")([conv4, conv4])
-    conv4 = concatenate([conv4, corr4], axis=-1)
+    conv4 = concatenate([conv4, corr4], axis=-1, name="feature_vector")
     up5 = concatenate([UpSampling2D()(conv4), conv3], axis=-1)
     conv5 = conv_block_simple(up5, 128, "conv5_1")
     conv5 = conv_block_simple(conv5, 128, "conv5_2")
@@ -698,16 +697,31 @@ def get_csse_unet(input_shape):
     return model
 
 
-def add_classification_head(input_shape, segmentation_model, encoder_output_name, num_classes):
-    model_base = make_model(input_shape, segmentation_model)
-    encoder_output = model_base.get_layer(encoder_output_name).output
+def add_classification_head(segmentation_model, encoder_output_name, channels):
+    encoder_output = segmentation_model.get_layer(encoder_output_name).output
     x = GlobalAveragePooling2D(name="avg_pool_classification_head")(encoder_output)
-    classes = Dense(num_classes, activation='sigmoid', name='classes_prediction')(x)
-    final_model = Model(inputs=[model_base.input], outputs=[model_base.output, classes])
+    classes = Dense(channels, activation='sigmoid', name='classification')(x)
+    final_model = Model(inputs=[segmentation_model.input],
+                        outputs=[segmentation_model.output, classes])
     return final_model
 
 
 def make_model(input_shape, network, **kwargs):
+    if kwargs["add_classification_head"]:
+        kwargs["add_classification_head"] = False
+        classification_classes = kwargs["channels"] - 1 if 'background' in kwargs["classes"] else kwargs["channels"]
+        segmentation_model = make_model(input_shape, network, **kwargs)
+        # currently supports only resnet50 architecture
+        segmentation_model_with_cls_head = \
+            add_classification_head(segmentation_model,
+                                    encoder_output_name="feature_vector",
+                                    channels=classification_classes)
+        return segmentation_model_with_cls_head
+    else:
+        if "classes" in kwargs.keys():
+            kwargs.pop("classes")
+        if "add_classification_head" in kwargs.keys():
+            kwargs.pop("add_classification_head")
     if network == 'resnet50':
         return get_unet_resnet(input_shape)
     elif network == 'csse_resnet50':
@@ -730,7 +744,5 @@ def make_model(input_shape, network, **kwargs):
         return csse_resnet50_fpn_multi(input_shape, **kwargs)
     elif network == "csse_resnet_50_fpn_instance":
         return csse_resnet50_fpn_instance(input_shape, **kwargs)
-    elif network == "csse_resnet_50_fpn_instance_cls_head":
-        return add_classification_head(input_shape, "csse_resnet_50_fpn_instance", **kwargs)
     else:
         raise ValueError("Unknown network")

@@ -10,6 +10,7 @@ from research_code.params import args
 from research_code.train import train
 from research_code.predict_masks import predict
 from research_code.evaluate import evaluate
+from research_code.utils import calculate_ndvi, calculate_ndwi, calculate_lightness
 
 
 def find_best_model(model_dir):
@@ -24,12 +25,59 @@ def find_best_model(model_dir):
     return best_model_name
 
 
-def generate_ndvi():
-    pass
+def generate_ndvi(img_dir: str, input_df: pd.DataFrame):
+    ndvi_dir_path = os.path.join(img_dir, "images", "ndvi")
+    if os.path.exists(ndvi_dir_path):
+        print("NDVI has been precomputed. Skipping NDVI computation")
+        return
+    else:
+        print("Precomputing NDVI channel")
+        os.makedirs(ndvi_dir_path)
+    for idx, row in tqdm(input_df.iterrows(), total=len(input_df)):
+        filename = row["name"]
+        rgb_path = os.path.join(img_dir, "images", "rgb", filename)
+        nir_path = os.path.join(img_dir, "images", "nir", filename)
+        ndvi_path = os.path.join(ndvi_dir_path, filename)
+        rgb_img = cv2.cvtColor(cv2.imread(rgb_path), cv2.COLOR_BGR2RGB)
+        nir_img = cv2.imread(nir_path, cv2.IMREAD_GRAYSCALE)
+        ndvi = calculate_ndvi(rgb_img[:, :, 0], nir_img)
+        cv2.imwrite(ndvi_path, ndvi)
 
 
-def generate_ndwi():
-    pass
+def generate_ndwi(img_dir: str, input_df: pd.DataFrame):
+    ndwi_dir_path = os.path.join(img_dir, "images", "ndwi")
+    if os.path.exists(ndwi_dir_path):
+        print("NDWI has been precomputed. Skipping NDWI computation")
+        return
+    else:
+        print("Precomputing NDWI channel")
+        os.makedirs(ndwi_dir_path)
+    for idx, row in tqdm(input_df.iterrows(), total=len(input_df)):
+        filename = row["name"]
+        rgb_path = os.path.join(img_dir, "images", "rgb", filename)
+        nir_path = os.path.join(img_dir, "images", "nir", filename)
+        ndwi_path = os.path.join(ndwi_dir_path, filename)
+        rgb_img = cv2.cvtColor(cv2.imread(rgb_path), cv2.COLOR_BGR2RGB)
+        nir_img = cv2.imread(nir_path, cv2.IMREAD_GRAYSCALE)
+        ndwi = calculate_ndwi(rgb_img[:, :, 1], nir_img)
+        cv2.imwrite(ndwi_path, ndwi)
+
+
+def generate_lightness(img_dir: str, input_df: pd.DataFrame):
+    lightness_dir_path = os.path.join(img_dir, "images", "l")
+    if os.path.exists(lightness_dir_path):
+        print("Lightness has been precomputed. Skipping lightness computation")
+        return
+    else:
+        print("Precomputing lightness channel")
+        os.makedirs(lightness_dir_path)
+    for idx, row in tqdm(input_df.iterrows(), total=len(input_df)):
+        filename = row["name"]
+        rgb_path = os.path.join(img_dir, "images", "rgb", filename)
+        lightness_path = os.path.join(lightness_dir_path, filename)
+        rgb_img = cv2.cvtColor(cv2.imread(rgb_path), cv2.COLOR_BGR2RGB)
+        ndwi = calculate_lightness(rgb_img)
+        cv2.imwrite(lightness_path, ndwi)
 
 
 def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_names: List[str]):
@@ -58,11 +106,15 @@ def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_name
 
 def run_experiment():
     dataset_df = pd.read_csv(args.dataset_df)
-    classes = args.class_names
+    classes = list(args.class_names)
     if 'background' in classes:
         classes.remove('background')
-    precompute_background_class(args.train_dir, dataset_df[dataset_df["ds_part"] == 'train'], classes)
-    precompute_background_class(args.val_dir, dataset_df[dataset_df["ds_part"] == 'val'], classes)
+    for ds_part, ds_dir in zip(['train', 'val'], [args.train_dir, args.val_dir]):
+        df = dataset_df[dataset_df["ds_part"] == ds_part]
+        precompute_background_class(ds_dir, df, classes)
+        generate_lightness(ds_dir, df)
+        generate_ndvi(ds_dir, df)
+        generate_ndwi(ds_dir, df)
 
     experiment_dir, model_dir, experiment_name = train()
     prediction_dir = os.path.join(experiment_dir, "predictions")
@@ -77,8 +129,9 @@ def run_experiment():
             weights_path=weights_path,
             test_df_path=test_df_path,
             test_data_dir=test_data_dir,
-            stacked_channels=args.stacked_channels,
-            network=args.network)
+            input_channels=args.channels,
+            network=args.network,
+            add_classification_head=args.add_classification_head)
     print(f"Starting evaluation process of results in {prediction_dir}")
     evaluate(test_dir=test_data_dir,
              experiment_dir=experiment_dir,

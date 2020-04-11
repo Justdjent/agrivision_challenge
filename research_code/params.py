@@ -27,7 +27,7 @@ arg('--val_dir', default='/mnt/storage/cal/data/agrivision/val')
 arg('--test_dir', default='/mnt/storage/cal/data/agrivision/test')
 arg('--dataset_df', default='/mnt/storage/cal/data/agrivision/train_val_initial_2020-03-25.csv')
 arg('--exclude_bad_labels_df')
-arg('--add_classification_head')
+
 arg('--experiments_dir', default='/mnt/storage/cal/artifacts/agrivision')
 arg('--class_names', nargs='+', default=['cloud_shadow', 'double_plant', 'planter_skip', 'standing_water', 'waterway', 'weed_cluster'])
 arg('--models_dir', default='models')
@@ -41,8 +41,6 @@ arg('--net_alias', default='')
 arg('--loss_function', default='')
 
 arg('--pred_sample_csv', default='input/sample_submission.csv')
-arg('--stacked_channels', type=int, default=0)
-arg('--stacked_channels_dir', default="blue")
 arg('--edges', action='store_true')
 
 arg('--threshold', type=float, default=0.5)
@@ -51,5 +49,9 @@ arg('--exp_name')
 arg('--coord_conv', type=bool, default=False)
 arg('--use_aug', action='store_true')
 arg('--activation', default='sigmoid', choices=['sigmoid', 'softmax'])
+arg('--add_classification_head', action='store_true')
+arg('--cls_head_loss_weight', '-cw', default=0.2)
+
+arg('--channels', nargs='+', default=['r', 'g', 'b', 'nir', 'ndvi', 'ndwi', 'l'])
 
 args = parser.parse_args()
