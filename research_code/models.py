@@ -592,7 +592,7 @@ def get_instance_unet(input_shape, channels=1, activation="sigmoid"):
 
 
 def get_instance_unet_correlation(input_shape, channels=1, activation="sigmoid"):
-    max_distance = 20
+    max_distance = 10
     img_input = Input(input_shape)
     # corr1 = CorrelationCost(pad=max_distance,
     #                        kernel_size=1,

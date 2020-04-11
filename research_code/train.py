@@ -74,7 +74,7 @@ def train():
         loss_list = [make_loss('bce_dice_softmax')]
         metrics_list = [dice_without_background]
     elif activation == 'sigmoid':
-        loss_list = [make_loss('cce_dice')]
+        loss_list = [make_loss('focal_dice')]
         metrics_list = [dice_coef]
     else:
         raise ValueError(f"Unknown activation function - {activation}")
