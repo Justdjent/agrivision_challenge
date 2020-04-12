@@ -53,5 +53,5 @@ arg('--add_classification_head', action='store_true')
 arg('--cls_head_loss_weight', '-cw', default=0.2)
 
 arg('--channels', nargs='+', default=['r', 'g', 'b', 'nir', 'ndvi', 'ndwi', 'l'])
-
+arg('--segm_loss', default='bce_dice')
 args = parser.parse_args()

@@ -13,16 +13,21 @@ from research_code.evaluate import evaluate
 from research_code.utils import calculate_ndvi, calculate_ndwi, calculate_lightness
 
 
-def find_best_model(model_dir):
-    min_loss = 10e+5
-    best_model_name = None
+def find_best_model(model_dir, mode='max'):
+    metrics = []
+    model_names = []
     for file in os.listdir(model_dir):
         if file.endswith("h5"):
-            loss_value = float('.'.join(file.split("-")[-1].split(".")[:-1]))
-            if loss_value < min_loss:
-                min_loss = loss_value
-                best_model_name = file
-    return best_model_name
+            metric = float('.'.join(file.split("-")[-1].split(".")[:-1]))
+            metrics.append(metric)
+            model_names.append(file)
+    if mode == 'max':
+        best_model_idx = np.argmax(metrics)
+    elif mode == 'min':
+        best_model_idx = np.argmin(metrics)
+    else:
+        raise ValueError(f"Unknown mode used {mode}")
+    return model_names[best_model_idx]
 
 
 def generate_ndvi(img_dir: str, input_df: pd.DataFrame):
@@ -118,7 +123,7 @@ def run_experiment():
 
     experiment_dir, model_dir, experiment_name = train()
     prediction_dir = os.path.join(experiment_dir, "predictions")
-    best_model_name = find_best_model(model_dir)
+    best_model_name = find_best_model(model_dir, mode='max')
     weights_path = os.path.join(model_dir, best_model_name)
 
     test_df_path = args.dataset_df

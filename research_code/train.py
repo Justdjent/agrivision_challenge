@@ -74,7 +74,7 @@ def train():
         loss_list = [make_loss('bce_dice_softmax')]
         metrics_list = [dice_without_background]
     elif activation == 'sigmoid':
-        loss_list = [make_loss('boot_soft')]
+        loss_list = [make_loss(args.segm_loss)]
         metrics_list = [dice_coef]
     else:
         raise ValueError(f"Unknown activation function - {activation}")
@@ -160,7 +160,7 @@ def train():
                                  verbose=1,
                                  save_best_only=True,
                                  save_weights_only=True,
-                                 mode='min')
+                                 mode='max')
 
     callbacks = [best_model,
                  EarlyStopping(patience=25, verbose=10),
