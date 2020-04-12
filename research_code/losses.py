@@ -76,11 +76,11 @@ def bce_dice_softmax(y_true, y_pred):
 
 def cce_dice(y_true, y_pred, label_smoothing=0.2, cce=0.2, dice=0.8):
     return tf.keras.losses.CategoricalCrossentropy(label_smoothing)(y_true, y_pred) * cce + \
-           dice_coef(y_true, y_pred) * dice
+           dice_coef_loss(y_true, y_pred) * dice
 
 
 def focal_dice_loss(y_true, y_pred, focal=0.2, dice=0.8):
-    return SigmoidFocalCrossEntropy()(y_true, y_pred) * focal + dice_coef(y_true, y_pred) * dice
+    return SigmoidFocalCrossEntropy()(y_true, y_pred) * focal + dice_coef_loss(y_true, y_pred) * dice
 
 
 def bootstrapped_crossentropy(y_true, y_pred, bootstrap_type='hard', alpha=0.95):
