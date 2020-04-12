@@ -321,7 +321,7 @@ def make_loss(loss_name):
             return dice_coef_loss_bce(y, p, dice=0.8, bce=0.2, bootstrapping='soft', alpha=0.95)
 
         return loss
-    elif loss_name == "cce_dice":
+    elif loss_name == "cce_dice_smoothed":
         def loss(y, p):
             return cce_dice(y, p, label_smoothing=0.2, cce=0.2, dice=0.8)
 
