@@ -71,7 +71,7 @@ def train():
     if args.show_summary:
         model.summary()
     if activation == 'softmax':
-        loss_list = [make_loss('bce_dice_softmax')]
+        loss_list = [make_loss(args.segm_loss)]
         metrics_list = [dice_without_background]
     elif activation == 'sigmoid':
         loss_list = [make_loss(args.segm_loss)]
