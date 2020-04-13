@@ -131,8 +131,8 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
     def on_epoch_end(self):
         """Shuffle the dataset on epoch end
         """
-        if self.shuffle == True:
-            skl_shuffle(self.dataset_df)
+        if self.shuffle:
+            self.dataset_df = skl_shuffle(self.dataset_df)
 
     def read_masks_borders(self, name):
         border_path = os.path.join(
