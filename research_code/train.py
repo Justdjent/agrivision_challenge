@@ -17,10 +17,8 @@ def setup_env():
     if gpus:
         try:
             # Currently, memory growth needs to be the same across GPUs
-            tf.config.experimental.set_virtual_device_configuration(gpus[0], [
-                tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024 * 6)])
-            # for gpu in gpus:
-            #     tf.config.experimental.set_memory_growth(gpu, True)
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
             logical_gpus = tf.config.experimental.list_logical_devices('GPU')
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:

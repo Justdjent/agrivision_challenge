@@ -465,7 +465,7 @@ def csse_resnet50_fpn_multi_corr(input_shape, channels=1, activation="sigmoid"):
                             stride_1=1,
                             stride_2=4,
                             data_format="channels_last")([conv5, conv5])
-    conv5 = concatenate([conv5, corr5], axis=-1)
+    conv5 = concatenate([conv5, corr5], axis=-1, name="feature_vector")
     conv5 = csse_block(conv5, "csse_48")
 
     P1, P2, P3, P4, P5 = create_pyramid_features(conv1, conv2, conv3, conv4, conv5)
