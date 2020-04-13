@@ -490,7 +490,7 @@ def csse_resnet50_fpn_multi_corr(input_shape, channels=1, activation="sigmoid"):
 
 
 def csse_resnet50_fpn_multi_corr(input_shape, channels=1, activation="sigmoid"):
-    max_distance = 10
+    max_distance = 3
     resnet_input = tuple([input_shape[0], input_shape[1], 3])
     resnet_base = ResNet50(input_shape=input_shape, include_top=False, weights=None)
     resnet_base_we = ResNet50_multi(input_shape=resnet_input, include_top=False)
