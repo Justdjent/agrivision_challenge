@@ -10,6 +10,9 @@ from tensorflow.keras.layers import MaxPooling2D
 import tensorflow.keras.backend as KB
 import tensorflow as tf
 
+import segmentation_models as sm
+sm.set_framework('tf.keras')
+
 from research_code.resnet50_fixed import ResNet50, ResNet50_multi
 from research_code.params import args
 from research_code.sel_models.unets import (create_pyramid_features, conv_relu, prediction_fpn_block, conv_bn_relu,
@@ -417,6 +420,36 @@ def csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid"):
     model = Model(resnet_base.input, x)
 
     return model
+
+
+def get_effnetb0_multi(input_shape, channels=1, activation="sigmoid"):
+    effnet_input = tuple([input_shape[0], input_shape[1], 3])
+    effnet_base = sm.Unet('efficientnetb0',input_shape=input_shape, classes=channels, activation=activation, encoder_weights=None)
+    effnet_base_we = sm.Unet('efficientnetb0', input_shape=effnet_input, classes=channels, activation=activation)
+
+    # EfficientNet stem doesn't have bias
+    conv_weights = effnet_base_we.layers[1].get_weights()[0]
+    h, w, f = conv_weights.shape[0], conv_weights.shape[1], conv_weights.shape[3]
+    # getting new_weights
+    new_weights = np.zeros((h, w, input_shape[-1], f))
+    new_weights[:, :, :3, :] = conv_weights
+
+    for i in effnet_base_we.layers:
+        if 'input_' in i.name:
+            continue
+        if i.name == 'stem_conv':
+            effnet_base.get_layer(i.name).set_weights([new_weights])
+        else:
+            effnet_base.get_layer(i.name).set_weights(effnet_base_we.get_layer(i.name).get_weights())
+
+    del effnet_base_we
+    if args.show_summary:
+        effnet_base.summary()
+
+    for l in effnet_base.layers:
+        l.trainable = True
+
+    return effnet_base
 
 
 def resnet50_fpn(input_shape, channels=1, activation="sigmoid"):
@@ -937,9 +970,13 @@ def make_model(input_shape, network, **kwargs):
         kwargs["add_classification_head"] = False
         classification_classes = kwargs["channels"] - 1 if 'background' in kwargs["classes"] else kwargs["channels"]
         segmentation_model = make_model(input_shape, network, **kwargs)
+        if "effnetb0" in network:
+            encoder_output_name = "top_activation"
+        else:
+            encoder_output_name ="activation_48"
         # currently supports only resnet50 architecture
         segmentation_model_with_cls_head = add_classification_head(segmentation_model,
-                                                                   encoder_output_name="activation_48",
+                                                                   encoder_output_name=encoder_output_name,
                                                                    channels=classification_classes)
         return segmentation_model_with_cls_head
     else:
@@ -973,6 +1010,8 @@ def make_model(input_shape, network, **kwargs):
         return csse_resnet50_fpn_multi(input_shape, **kwargs)
     elif network == "csse_resnet_50_fpn_instance":
         return csse_resnet50_fpn_instance(input_shape, **kwargs)
+    elif network == "effnetb0_multi":
+        return get_effnetb0_multi(input_shape, **kwargs)
 
     elif network == "angle_net":
         return get_angle_net(input_shape)
