@@ -110,7 +110,7 @@ def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: f
     """
     prediction_dir = os.path.join(experiment_dir, "predictions")
     test_df = pd.read_csv(test_df_path)
-    test_df = test_df[test_df['ds_part'] == 'val'][:4]
+    test_df = test_df[test_df['ds_part'] == 'val']
     class_names = class_names + ['background']
     df = pd.DataFrame(columns=class_names + ['name'])
     num_classes = len(class_names)

@@ -18,6 +18,10 @@ HEAD_CHANNELS = {"cloud_shadow": ["cloud_shadow"],
                              "plants": ["double_plant", "planter_skip"],
                              "weed_waterway": ["weed_cluster", "waterway"]}
 
+#HEAD_CHANNELS = {"cloud_shadow": ["cloud_shadow"],
+#                             "plants": ["double_plant", "planter_skip"],
+#                             "weed_waterway_water": ["weed_cluster", "waterway", "standing_water"]}
+
 def reshape(reshape_size=(512, 512)):
     return albu.Compose([albu.Resize(reshape_size[0], reshape_size[1], interpolation=cv2.INTER_NEAREST, p=1)], p=1)
 

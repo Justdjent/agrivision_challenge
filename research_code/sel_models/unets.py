@@ -91,46 +91,47 @@ def decoder_block_no_bn(input, filters, skip, block_name, activation='relu'):
 
 
 
-def create_pyramid_features(C1, C2, C3, C4, C5, feature_size=256, coord_conv=args.coord_conv):
+def create_pyramid_features(C1, C2, C3, C4, C5, feature_size=256, coord_conv=args.coord_conv, head_name = ''):
     if coord_conv:
         C1 = CoordinateChannel2D()(C1)
         C2 = CoordinateChannel2D()(C2)
         C3 = CoordinateChannel2D()(C3)
         C4 = CoordinateChannel2D()(C4)
         C5 = CoordinateChannel2D()(C5)
-    P5 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='P5', kernel_initializer="he_normal")(C5)
-    P5_upsampled = UpSampling2D(name='P5_upsampled')(P5)
 
-    P4 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C4_reduced',
+    P5 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name="P5_{}".format(head_name), kernel_initializer="he_normal")(C5)
+    P5_upsampled = UpSampling2D(name="P5_upsampled_{}".format(head_name))(P5)
+
+    P4 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C4_reduced_{}'.format(head_name),
                 kernel_initializer="he_normal")(C4)
-    P4 = Add(name='P4_merged')([P5_upsampled, P4])
+    P4 = Add(name='P4_merged_{}'.format(head_name))([P5_upsampled, P4])
     if coord_conv:
         P4 = CoordinateChannel2D()(P4)
-    P4 = Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P4', kernel_initializer="he_normal")(P4)
-    P4_upsampled = UpSampling2D(name='P4_upsampled')(P4)
+    P4 = Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P4_{}'.format(head_name), kernel_initializer="he_normal")(P4)
+    P4_upsampled = UpSampling2D(name='P4_upsampled_{}'.format(head_name))(P4)
 
-    P3 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C3_reduced',
+    P3 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C3_reduced_{}'.format(head_name),
                 kernel_initializer="he_normal")(C3)
-    P3 = Add(name='P3_merged')([P4_upsampled, P3])
+    P3 = Add(name='P3_merged_{}'.format(head_name))([P4_upsampled, P3])
     if coord_conv:
         P3 = CoordinateChannel2D()(P3)
-    P3 = Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P3', kernel_initializer="he_normal")(P3)
-    P3_upsampled = UpSampling2D(name='P3_upsampled')(P3)
+    P3 = Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P3_{}'.format(head_name), kernel_initializer="he_normal")(P3)
+    P3_upsampled = UpSampling2D(name='P3_upsampled_{}'.format(head_name))(P3)
 
-    P2 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C2_reduced',
+    P2 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C2_reduced_{}'.format(head_name),
                 kernel_initializer="he_normal")(C2)
-    P2 = Add(name='P2_merged')([P3_upsampled, P2])
+    P2 = Add(name='P2_merged_{}'.format(head_name))([P3_upsampled, P2])
     if coord_conv:
         P2 = CoordinateChannel2D()(P2)
-    P2 = Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P2', kernel_initializer="he_normal")(P2)
-    P2_upsampled = UpSampling2D(size=(2, 2), name='P2_upsampled')(P2)
+    P2 = Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P2_{}'.format(head_name), kernel_initializer="he_normal")(P2)
+    P2_upsampled = UpSampling2D(size=(2, 2), name='P2_upsampled_{}'.format(head_name))(P2)
 
-    P1 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C1_reduced',
+    P1 = Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C1_reduced_{}'.format(head_name),
                 kernel_initializer="he_normal")(C1)
-    P1 = Add(name='P1_merged')([P2_upsampled, P1])
+    P1 = Add(name='P1_merged_{}'.format(head_name))([P2_upsampled, P1])
     if coord_conv:
         P1 = CoordinateChannel2D()(P1)
-    P1 = Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P1', kernel_initializer="he_normal")(P1)
+    P1 = Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P1_{}'.format(head_name), kernel_initializer="he_normal")(P1)
 
     return P1, P2, P3, P4, P5
 
