@@ -154,11 +154,11 @@ def train():
         channels=args.channels
     )
 
-    best_model = ModelCheckpoint(best_model_file, monitor='val_mask_dice_coef',
+    best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
                                  verbose=1,
                                  save_best_only=True,
                                  save_weights_only=True,
-                                 mode='max')
+                                 mode='min')
 
     callbacks = [best_model,
                  EarlyStopping(patience=25, verbose=10),

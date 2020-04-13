@@ -123,7 +123,7 @@ def run_experiment():
 
     experiment_dir, model_dir, experiment_name = train()
     prediction_dir = os.path.join(experiment_dir, "predictions")
-    best_model_name = find_best_model(model_dir, mode='max')
+    best_model_name = find_best_model(model_dir, mode='min')
     weights_path = os.path.join(model_dir, best_model_name)
 
     test_df_path = args.dataset_df
