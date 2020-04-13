@@ -811,6 +811,8 @@ def make_model(input_shape, network, **kwargs):
         return csse_resnet50_fpn(input_shape, **kwargs)
     elif network == 'csse_resnet50_fpn_multi':
         return csse_resnet50_fpn_multi(input_shape, **kwargs)
+    elif network == 'csse_resnet50_fpn_multi_corr':
+        return csse_resnet50_fpn_multi_corr(input_shape, **kwargs)
     elif network == "csse_resnet_50_fpn_instance":
         return csse_resnet50_fpn_instance(input_shape, **kwargs)
     else:
