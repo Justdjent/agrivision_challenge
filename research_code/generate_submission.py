@@ -60,7 +60,6 @@ def generate_submission(weights_path, thresh=0.5):
         cv2.imwrite(save_path_masks, mixed_prediction)
         pbar.update(1)
 
-    shutil.make_archive("submission.zip", "zip", os.path.join(args.experiments_dir, args.exp_name))
-
+        shutil.make_archive(os.path.join(args.experiments_dir, args.exp_name, "submission"), "zip", os.path.join(args.experiments_dir, args.exp_name, 'submission'))
 if __name__ == '__main__':
     generate_submission(args.weights, args.threshold)
