@@ -74,8 +74,8 @@ def bce_dice_softmax(y_true, y_pred):
     return tf.keras.losses.CategoricalCrossentropy()(y_true, y_pred) + dice_loss_without_background(y_true, y_pred)
 
 
-def cce_dice(y_true, y_pred, label_smoothing=0.2, cce=0.2, dice=0.8):
-    return tf.keras.losses.CategoricalCrossentropy(label_smoothing)(y_true, y_pred) * cce + \
+def bce_dice_smoothed(y_true, y_pred, label_smoothing=0.2, bce=0.2, dice=0.8):
+    return tf.keras.losses.BinaryCrossentropy(label_smoothing=label_smoothing)(y_true, y_pred) * bce + \
            dice_coef_loss(y_true, y_pred) * dice
 
 
@@ -321,9 +321,9 @@ def make_loss(loss_name):
             return dice_coef_loss_bce(y, p, dice=0.8, bce=0.2, bootstrapping='soft', alpha=0.95)
 
         return loss
-    elif loss_name == "cce_dice_smoothed":
+    elif loss_name == "bce_dice_smoothed":
         def loss(y, p):
-            return cce_dice(y, p, label_smoothing=0.2, cce=0.2, dice=0.8)
+            return bce_dice_smoothed(y, p, label_smoothing=0.2, bce=0.2, dice=0.8)
 
         return loss
     elif loss_name == "focal_dice":
