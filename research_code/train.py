@@ -47,7 +47,7 @@ def train():
         '{}/{}{}loss-{}-{}{:.6f}'.format(model_dir, args.network,
                                          formatted_net_alias, args.loss_function, args.crop_width,
                                          args.learning_rate) + \
-        '-{epoch:d}-{val_mask_dice_coef:0.7f}.h5'
+        '-{epoch:d}-{val_loss:0.7f}.h5'
     ch = 1
     activation = args.activation
     model = make_model((None, None, len(args.channels)),
