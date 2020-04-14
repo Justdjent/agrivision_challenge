@@ -499,7 +499,7 @@ def csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid"):
 
 
 def csse_resnet50_fpn_multi_corr(input_shape, channels=1, activation="sigmoid"):
-    max_distance = 10
+    max_distance = 3
     resnet_input = tuple([input_shape[0], input_shape[1], 3])
     resnet_base = ResNet50(input_shape=input_shape, include_top=False, weights=None)
     resnet_base_we = ResNet50_multi(input_shape=resnet_input, include_top=False)
@@ -628,7 +628,7 @@ def csse_resnet50_unet_multi_corr_3heads(input_shape, channels=1, activation="si
 
 
 def csse_resnet50_fpn_multi_corr_3heads_pyr(input_shape, channels=1, activation="sigmoid"):
-    max_distance = 10
+    max_distance = 3
     resnet_input = tuple([input_shape[0], input_shape[1], 3])
     resnet_base = ResNet50(input_shape=input_shape, include_top=False, weights=None)
     resnet_base_we = ResNet50_multi(input_shape=resnet_input, include_top=False)
@@ -989,7 +989,7 @@ def get_instance_unet_corr(input_shape, channels=1, activation="sigmoid"):
     name_channels = {k:len(v) for k, v in HEAD_CHANNELS.items()}
     outputs = {}
     for name, num_ch in name_channels.items():
-        outputs[name] = add_unet_decoder(activation, channels, conv1, conv2, conv3, conv4, name)
+        outputs[name] = add_unet_decoder(activation, num_ch, conv1, conv2, conv3, conv4, name)
 
 
     model = Model(img_input, outputs)

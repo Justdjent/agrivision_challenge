@@ -338,18 +338,22 @@ class DataGeneratorMultiheadOutput(DataGenerator_agrivision):
                 head_target = np.zeros((img.shape[0], img.shape[1], len(head_targets)))
                 for num, target in enumerate(head_targets):
                     head_target[:, :, num] = targets[:, :, self.classes.index(target)]
+                
                 batch_y[head].append(head_target)
+            #for some_head, some_target in batch_y.items():
+            #    if np.array(some_target).max() == 0:
+            #        print(some_head)
             batch_x.append(img)
 
         batch_x = np.array(batch_x, np.float32)
         for_classifiction = np.array(for_classifiction, np.float32)
         batch_y = {k: np.array(v, np.float32) for k, v in batch_y.items()}
         batch_y = {k: np.expand_dims(v, axis=-1) for k, v in batch_y.items()}
-
+        
         return (
             imagenet_utils.preprocess_input(batch_x, "channels_last", mode="tf"),
             batch_y,
-            for_classifiction
+            #for_classifiction
         )
 
 

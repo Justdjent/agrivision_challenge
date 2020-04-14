@@ -78,29 +78,31 @@ def train():
         raise ValueError(f"Unknown activation function - {activation}")
 
     loss_weights = None
-    if args.add_classification_head:
+    #if args.add_classification_head:
         # if metrics are passed as lists then each metric is calculated for each task
-        losses = {}
-        metrics = {}
-        loss_weights = {}
-        # get names of output layers in order to create dict with metrics/losses
-        print(model.output)
-        output_names = [layer.name.split('/')[0] for layer in model.output if not isinstance(layer, dict)]
-        for head, tensor in model.output[0].items():
-            output_names.append(head)
-        for name in output_names:
-            if name == "classification":
-                losses[name] = make_loss('crossentropy')
-                metrics[name] = [tf.keras.metrics.Recall(), tf.keras.metrics.Precision(),
-                                 tf.keras.metrics.AUC(num_thresholds=20, curve='ROC', name="roc"),
-                                 tf.keras.metrics.AUC(num_thresholds=20, curve='PR', name="pr")]
-                loss_weights[name] = args.cls_head_loss_weight
-            else:
-                losses[name] = loss_list[0]
-                metrics[name] = metrics_list[0]
-                loss_weights[name] = 1 - args.cls_head_loss_weight
-        loss_list = losses
-        metrics_list = metrics
+    losses = {}
+    metrics = {}
+    loss_weights = {}
+    # get names of output layers in order to create dict with metrics/losses
+    print(model.output)
+    # output_names = [layer.name.split('/')[0] for layer in model.output if not isinstance(layer, dict)]
+    output_names = []
+    for head, tensor in model.output.items():
+        output_names.append(head)
+    print(output_names)
+    for name in output_names:
+        if name == "classification":
+            losses[name] = make_loss('crossentropy')
+            metrics[name] = [tf.keras.metrics.Recall(), tf.keras.metrics.Precision(),
+                                tf.keras.metrics.AUC(num_thresholds=20, curve='ROC', name="roc"),
+                                tf.keras.metrics.AUC(num_thresholds=20, curve='PR', name="pr")]
+            loss_weights[name] = args.cls_head_loss_weight
+        else:
+            losses[name] = loss_list[0]
+            metrics[name] = metrics_list[0]
+            loss_weights[name] = 1 - args.cls_head_loss_weight
+    loss_list = losses
+    metrics_list = metrics
     if args.add_classification_head:
         if args.multihead:
             generator_class = DataGeneratorClassificationHeadMulti
