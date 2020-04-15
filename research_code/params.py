@@ -24,6 +24,7 @@ arg('--batch_size', type=int, default=1)
 #TODO Merge train and val
 arg('--train_dir', default='/mnt/storage/cal/data/agrivision/train')
 arg('--val_dir', default='/mnt/storage/cal/data/agrivision/val')
+arg('--test_dir', default='/mnt/storage/cal/data/agrivision/val')
 arg('--dataset_df', default='/mnt/storage/cal/data/agrivision/train_val_initial_2020-03-25.csv')
 arg('--exclude_bad_labels_df')
 

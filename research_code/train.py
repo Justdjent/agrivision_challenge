@@ -18,7 +18,7 @@ def setup_env():
         try:
             # Currently, memory growth needs to be the same across GPUs
             for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
+                # tf.config.experimental.set_memory_growth(gpu, True)
                 logical_gpus = tf.config.experimental.list_logical_devices('GPU')
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:
@@ -116,15 +116,18 @@ def train():
     else:
         print('Using full size images, --use_crop=True to do crops')
     dataset_df = pd.read_csv(args.dataset_df)
-
-    train_df = dataset_df[dataset_df["ds_part"] == "train"]
+    print("Total df size {}".format(len(dataset_df)))
     if args.exclude_bad_labels_df:
         invalid_df = pd.read_csv(args.exclude_bad_labels_df)
-        train_df = pd.merge(train_df, invalid_df, on='name', how='outer')
-        train_df['invalid'] = train_df['invalid'].fillna(False)
-        train_df = train_df[~train_df['invalid']]
+        print(invalid_df['invalid'].sum())
+        dataset_df = pd.merge(dataset_df, invalid_df, on='name', how='outer')
+        dataset_df['invalid'] = dataset_df['invalid'].fillna(False)
+        dataset_df = dataset_df[~dataset_df['invalid']]
+    print("Total df size {} after cleaning".format(len(dataset_df)))
+    train_df = dataset_df[dataset_df["ds_part"] == "train"]
+    
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
-    print('{} in train_ids, {} in val_ids'.format(len(train_df), len(val_df)))
+    print('{} in train_ids, {} in val_ids, total {}'.format(len(train_df), len(val_df), len(train_df) + len(val_df)))
 
     train_generator = generator_class(
         train_df,
@@ -144,7 +147,7 @@ def train():
         val_df,
         classes=args.class_names,
         img_dir=val_dir,
-        batch_size=1,
+        batch_size=args.batch_size//4,
         shuffle=True,
         reshape_size=(args.reshape_height, args.reshape_width),
         crop_size=crop_size,
@@ -172,8 +175,8 @@ def train():
         validation_data=val_generator,
         validation_steps=len(val_df) / args.batch_size + 1,
         callbacks=callbacks,
-        max_queue_size=4,
-        workers=2)
+        max_queue_size=32,
+        workers=4)
 
     del model
     tf.keras.backend.clear_session()

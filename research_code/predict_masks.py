@@ -14,7 +14,6 @@ from research_code.models import make_model
 from keras.applications import imagenet_utils
 
 
-
 def setup_env():
     tqdm.monitor_interval = 0
     gpus = tf.config.experimental.list_physical_devices('GPU')

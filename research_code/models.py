@@ -494,6 +494,144 @@ def get_effnetb0_multi_corr(input_shape, channels=1, activation="sigmoid", max_d
     return effnet_base
 
 
+def csse_resnet50_fpn_multi_corr(input_shape, channels=1, activation="sigmoid"):
+    max_distance = 20
+    resnet_input = tuple([input_shape[0], input_shape[1], 3])
+    resnet_base = ResNet50(input_shape=input_shape, include_top=False, weights=None)
+    resnet_base_we = ResNet50_multi(input_shape=resnet_input, include_top=False)
+
+    conv_weights, conv_bias = resnet_base_we.layers[1].get_weights()
+    # getting new_weights
+    new_weights = np.random.normal(size=(7, 7, input_shape[-1], 64), loc=0, scale=0.2)
+    new_weights[:, :, :3, :] = conv_weights
+
+    for i in resnet_base_we.layers:
+        if i.name == 'conv1':
+            resnet_base.get_layer(i.name).set_weights([new_weights, conv_bias])
+        try:
+            resnet_base.get_layer(i.name).set_weights(resnet_base_we.get_layer(i.name).get_weights())
+        except:
+            continue
+    del resnet_base_we
+    if args.show_summary:
+        resnet_base.summary()
+
+    for l in resnet_base.layers:
+        l.trainable = True
+
+    conv1 = resnet_base.get_layer("activation").output
+    conv1 = csse_block(conv1, "csse_1")
+    resnet_base.get_layer("max_pooling2d")(conv1)
+    conv2 = resnet_base.get_layer("activation_9").output
+    conv2 = csse_block(conv2, "csse_ngle_net9")
+    resnet_base.get_layer("res3a_branch2a")(conv2)
+    conv3 = resnet_base.get_layer("activation_21").output
+    conv3 = csse_block(conv3, "csse_21")
+    resnet_base.get_layer("res4a_branch2a")(conv3)
+    conv4 = resnet_base.get_layer("activation_39").output
+    conv4 = csse_block(conv4, "csse_39")
+    resnet_base.get_layer("res5a_branch2a")(conv4)
+    conv5 = resnet_base.get_layer("activation_48").output
+    
+    corr5 = CorrelationCost(pad=max_distance,
+                            kernel_size=1,
+                            max_displacement=max_distance,
+                            stride_1=1,
+                            stride_2=4,
+                            data_format="channels_last")([conv5, conv5])
+    conv5 = concatenate([conv5, corr5], axis=-1)
+    conv5 = csse_block(conv5, "csse_48")
+
+    P1, P2, P3, P4, P5 = create_pyramid_features(conv1, conv2, conv3, conv4, conv5)
+    x = concatenate(
+        [
+            csse_block(prediction_fpn_block(P5, "P5", (8, 8)), "csse_P5"),
+            csse_block(prediction_fpn_block(P4, "P4", (4, 4)), "csse_P4"),
+            csse_block(prediction_fpn_block(P3, "P3", (2, 2)), "csse_P3"),
+            csse_block(prediction_fpn_block(P2, "P2"), "csse_P2"),
+        ]
+    )
+    x = conv_bn_relu(x, 256, 3, (1, 1), name="aggregation")
+    x = decoder_block_no_bn(x, 128, conv1, 'up4')
+    x = UpSampling2D()(x)
+    x = conv_relu(x, 64, 3, (1, 1), name="up5_conv1")
+    x = conv_relu(x, 64, 3, (1, 1), name="up5_conv2")
+    x = Conv2D(channels, (1, 1), activation=activation, name="mask")(x)
+
+    model = Model(resnet_base.input, x)
+
+    return model
+
+
+def csse_resnet50_fpn_multi_corr(input_shape, channels=1, activation="sigmoid"):
+    max_distance = 10
+    resnet_input = tuple([input_shape[0], input_shape[1], 3])
+    resnet_base = ResNet50(input_shape=input_shape, include_top=False, weights=None)
+    resnet_base_we = ResNet50_multi(input_shape=resnet_input, include_top=False)
+
+    conv_weights, conv_bias = resnet_base_we.layers[1].get_weights()
+    # getting new_weights
+    new_weights = np.random.normal(size=(7, 7, input_shape[-1], 64), loc=0, scale=0.2)
+    new_weights[:, :, :3, :] = conv_weights
+
+    for i in resnet_base_we.layers:
+        if i.name == 'conv1':
+            resnet_base.get_layer(i.name).set_weights([new_weights, conv_bias])
+        try:
+            resnet_base.get_layer(i.name).set_weights(resnet_base_we.get_layer(i.name).get_weights())
+        except:
+            continue
+    del resnet_base_we
+    if args.show_summary:
+        resnet_base.summary()
+
+    for l in resnet_base.layers:
+        l.trainable = True
+
+    conv1 = resnet_base.get_layer("activation").output
+    conv1 = csse_block(conv1, "csse_1")
+    resnet_base.get_layer("max_pooling2d")(conv1)
+    conv2 = resnet_base.get_layer("activation_9").output
+    conv2 = csse_block(conv2, "csse_ngle_net9")
+    resnet_base.get_layer("res3a_branch2a")(conv2)
+    conv3 = resnet_base.get_layer("activation_21").output
+    conv3 = csse_block(conv3, "csse_21")
+    resnet_base.get_layer("res4a_branch2a")(conv3)
+    conv4 = resnet_base.get_layer("activation_39").output
+    conv4 = csse_block(conv4, "csse_39")
+    resnet_base.get_layer("res5a_branch2a")(conv4)
+    conv5 = resnet_base.get_layer("activation_48").output
+    corr5 = CorrelationCost(pad=max_distance,
+                            kernel_size=1,
+                            max_displacement=max_distance,
+                            stride_1=1,
+                            stride_2=4,
+                            data_format="channels_last")([conv5, conv5])
+    conv5 = concatenate([conv5, corr5], axis=-1)
+
+    conv5 = csse_block(conv5, "csse_48")
+
+    P1, P2, P3, P4, P5 = create_pyramid_features(conv1, conv2, conv3, conv4, conv5)
+    x = concatenate(
+        [
+            csse_block(prediction_fpn_block(P5, "P5", (8, 8)), "csse_P5"),
+            csse_block(prediction_fpn_block(P4, "P4", (4, 4)), "csse_P4"),
+            csse_block(prediction_fpn_block(P3, "P3", (2, 2)), "csse_P3"),
+            csse_block(prediction_fpn_block(P2, "P2"), "csse_P2"),
+        ]
+    )
+    x = conv_bn_relu(x, 256, 3, (1, 1), name="aggregation")
+    x = decoder_block_no_bn(x, 128, conv1, 'up4')
+    x = UpSampling2D()(x)
+    x = conv_relu(x, 64, 3, (1, 1), name="up5_conv1")
+    x = conv_relu(x, 64, 3, (1, 1), name="up5_conv2")
+    x = Conv2D(channels, (1, 1), activation=activation, name="mask")(x)
+
+    model = Model(resnet_base.input, x)
+
+    return model
+
+
 def resnet50_fpn(input_shape, channels=1, activation="sigmoid"):
     resnet_base = ResNet50(input_shape=input_shape, include_top=False)
 
@@ -1050,6 +1188,8 @@ def make_model(input_shape, network, **kwargs):
         return csse_resnet50_fpn(input_shape, **kwargs)
     elif network == 'csse_resnet50_fpn_multi':
         return csse_resnet50_fpn_multi(input_shape, **kwargs)
+    elif network == 'csse_resnet50_fpn_multi_corr':
+        return csse_resnet50_fpn_multi_corr(input_shape, **kwargs)
     elif network == "csse_resnet_50_fpn_instance":
         return csse_resnet50_fpn_instance(input_shape, **kwargs)
     elif network == "effnetb0_multi":
