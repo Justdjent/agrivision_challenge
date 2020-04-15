@@ -12,7 +12,6 @@ from typing import List
 from research_code.params import args
 from research_code.models import make_model
 from keras.applications import imagenet_utils
-#from tensorflow.image import flip_left_right
 
 
 def setup_env():
@@ -39,7 +38,7 @@ def do_tta(x, tta_type):
 
 def undo_tta(pred, tta_type):
     if tta_type == 'hflip':
-        return tf.imge.flip_left_right(pred, 2)
+        return tf.image.flip_left_right(pred, 2)
     else:
         return pred
 
