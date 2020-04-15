@@ -95,7 +95,8 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
             os.makedirs(save_folder_masks, exist_ok=True)
             save_path_masks = os.path.join(save_folder_masks, filename)
             cv2.imwrite(save_path_masks, bin_mask)
-
+    del model
+    tf.keras.backend.clear_session()
 
 if __name__ == '__main__':
     setup_env()
