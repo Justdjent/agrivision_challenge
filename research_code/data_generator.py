@@ -146,7 +146,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         self.reshape_size = reshape_size
         self.crop_size = crop_size
         self.do_aug = do_aug
-        self.aug = strong_aug(crop_size)
+        self.aug = harsh_aug(crop_size)
         self.reshape_func = reshape(reshape_size)
 
         self.on_epoch_end()
@@ -314,9 +314,8 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
             # (height, width, classes) -> (height, width)
             highest_score_label = batch_y.argmax(axis=-1)
             # (height, width) -> (height, width, classes)
-            batch_y = tf.one_hot(highest_score_label, len(self.classes), dtype=np.float32).numpy()
-
-        return imagenet_utils.preprocess_input(batch_x, 'channels_last', mode='tf'), batch_y
+            # batch_y = tf.one_hot(highest_score_label, len(self.classes), dtype=np.float32).numpy()
+        return imagenet_utils.preprocess_input(batch_x, 'channels_last', mode='tf'), highest_score_label
 
 
 class DataGeneratorClassificationHead(DataGeneratorSingleOutput):

@@ -3,6 +3,7 @@ import tensorflow.keras.backend as K
 from tensorflow.keras.losses import binary_crossentropy, mean_squared_error, mean_absolute_error
 import tensorflow as tf
 
+from research_code.lovasz import lovasz_softmax_keras
 
 def angle_rmse(pred, labels):
     # calculate mask
@@ -349,5 +350,7 @@ def make_loss(loss_name):
         return kld_loss_masked
     elif loss_name == 'angle_rmse':
         return angle_rmse
+    elif loss_name == 'lovasz_softmax':
+        return lovasz_softmax_keras
     else:
         ValueError("Unknown loss.")
