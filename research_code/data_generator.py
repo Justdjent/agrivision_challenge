@@ -18,6 +18,45 @@ def reshape(reshape_size=(512, 512)):
     return albu.Compose([albu.Resize(reshape_size[0], reshape_size[1], interpolation=cv2.INTER_NEAREST, p=1)], p=1)
 
 
+def harsh_aug(crop_size=(512, 512), borders=cv2.BORDER_CONSTANT):
+    return albu.Compose([
+        # Pixel level
+        albu.GaussNoise(p=0.2),
+
+        # Rigid
+        albu.Flip(p=0.2),
+        albu.RandomRotate90(p=0.2),
+        albu.HorizontalFlip(p=0.2),
+        albu.VerticalFlip(p=0.2),
+        albu.Transpose(p=0.2),
+
+        #Scaling
+        albu.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2, border_mode=borders),
+        albu.PadIfNeeded(512,512, border_mode=borders, always_apply=True),
+        albu.CenterCrop(512,512, always_apply=True),
+
+        # Non-rigid
+        albu.ElasticTransform(p=0.2, border_mode=borders),
+        albu.OpticalDistortion(p=0.2, distort_limit=0.3, border_mode=borders),
+
+        albu.RandomCrop(crop_size[0], crop_size[1], always_apply=True),
+        albu.CoarseDropout(
+            min_holes=4,
+            max_holes=24,
+            p=0.2,
+        ),
+        albu.CoarseDropout(
+            min_holes=1,
+            max_holes=5,
+            max_height=20,
+            min_height=10,
+            min_width=10,
+            max_width=20,
+            p=0.2
+        ),
+    ], p=1)
+
+
 def strong_aug(crop_size=(512, 512)):
     return albu.Compose([
         albu.RandomRotate90(),
@@ -107,7 +146,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         self.reshape_size = reshape_size
         self.crop_size = crop_size
         self.do_aug = do_aug
-        self.aug = strong_aug(crop_size)
+        self.aug = harsh_aug(crop_size)
         self.reshape_func = reshape(reshape_size)
 
         self.on_epoch_end()
@@ -148,7 +187,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         return border_img
 
     def _data_generation(self, batch_data):
-        """Generates data containing batch_size samples 
+        """Generates data containing batch_size samples
            X : (n_samples, *dim, n_channels)
         """
         # Initialization
