@@ -3,6 +3,8 @@ import tensorflow.keras.backend as K
 from tensorflow.keras.losses import binary_crossentropy, mean_squared_error, mean_absolute_error
 import tensorflow as tf
 
+from research_code.hausdorf_loss import HausdorffLoss
+
 
 def angle_rmse(pred, labels):
     # calculate mask
@@ -240,6 +242,10 @@ def dice_coef_loss_bce(y_true, y_pred, dice=0.5, bce=0.5, bootstrapping='hard', 
 def dice_coef_loss_bce_weighted(y_true, y_pred, dice=0.5, bce=0.5, bootstrapping='hard', alpha=1.):
     return bootstrapped_crossentropy(y_true, y_pred, bootstrapping, alpha) * bce + dice_coef_loss(y_true, y_pred) * dice
 
+def make_hausdorf_loss(y_true, y_pred):
+    hfl = HausdorffLoss()
+    return hfl.hausdorff_loss(y_true, y_pred)
+
 
 def mse_masked(y_true, y_pred):
     mask = tf.cast(tf.not_equal(y_true, 0), tf.float32)
@@ -296,10 +302,11 @@ def make_loss(loss_name):
     elif loss_name == 'crossentropy_boot':
         def loss(y, p):
             return bootstrapped_crossentropy(y, p, 'hard', 0.9)
-
         return loss
     elif loss_name == 'dice':
         return dice_coef_loss
+    elif loss_name == 'hausdorf':
+        return make_hausdorf_loss
     elif loss_name == 'bce_dice':
         def loss(y, p):
             return dice_coef_loss_bce(y, p, dice=0.8, bce=0.2, bootstrapping='soft', alpha=1)
