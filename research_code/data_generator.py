@@ -146,7 +146,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         self.reshape_size = reshape_size
         self.crop_size = crop_size
         self.do_aug = do_aug
-        self.aug = harsh_aug(crop_size)
+        self.aug = strong_aug(crop_size)
         self.reshape_func = reshape(reshape_size)
 
         self.on_epoch_end()
