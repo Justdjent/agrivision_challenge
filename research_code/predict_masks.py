@@ -12,6 +12,7 @@ from typing import List
 from research_code.params import args
 from research_code.models import make_model
 from keras.applications import imagenet_utils
+from scipy.stats.mstats import gmean
 
 
 def setup_env():
@@ -31,14 +32,18 @@ def setup_env():
 
 def do_tta(x, tta_type):
     if tta_type == 'hflip':
-        return tf.image.flip_left_right(x, 2)
+        return np.fliplr(x)
+    elif tta_type == 'vflip':
+        return np.flipud(x)
     else:
         return x
 
 
 def undo_tta(pred, tta_type):
     if tta_type == 'hflip':
-        return tf.image.flip_left_right(pred, 2)
+        return np.fliplr(pred)
+    elif tta_type == 'vflip':
+        return np.flipud(pred)
     else:
         return pred
 
@@ -49,6 +54,30 @@ def get_new_shape(img_shape, max_shape=224):
     else:
         new_shape = (int(img_shape[0] * max_shape / img_shape[1]), max_shape)
     return new_shape
+
+
+def run_model(model, x, add_classification_head):
+    x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
+    x = np.expand_dims(x, axis=0)
+    if add_classification_head:
+        preds, _ = model.predict(x)
+    else:
+        preds = model.predict(x)
+    return preds[0]
+
+
+def run_tta(x, model, add_classification_head):
+    x_lr = x.copy()
+    x_lr = do_tta(x_lr, 'hflip')
+
+    preds = run_model(model, x, add_classification_head)
+
+    preds_lr = run_model(model, x_lr, add_classification_head)
+    preds_lr = undo_tta(preds_lr, 'hflip')
+
+    preds = np.stack([preds, preds_lr], axis=0)
+    preds = gmean(preds, axis=0)
+    return preds
 
 
 def predict(experiment_dir: str, class_names: List[str], weights_path: str, test_df_path: str, test_data_dir: str,
@@ -80,14 +109,13 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
     nbr_test_samples = len(test_df)
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
         x = read_channels(input_channels, row["name"], test_data_dir)
-        x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
-        x = np.expand_dims(x, axis=0)
-        if add_classification_head:
-            preds, _ = model.predict(x)
+        if args.tta:
+            preds = run_tta(x, model, add_classification_head)
         else:
-            preds = model.predict(x)
+            preds = run_model(model, x, add_classification_head)
+
         for num in range(len(class_names)):
-            bin_mask = (preds[0, :, :, num] * 255).astype(np.uint8)
+            bin_mask = (preds[:, :, num] * 255).astype(np.uint8)
             cur_class = class_names[num]
             filename = row['name']
             save_folder_masks = os.path.join(output_dir, cur_class)
