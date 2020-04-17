@@ -532,7 +532,7 @@ def csse_resnet50_fpn_multi_corr(input_shape, channels=1, activation="sigmoid"):
     conv4 = csse_block(conv4, "csse_39")
     resnet_base.get_layer("res5a_branch2a")(conv4)
     conv5 = resnet_base.get_layer("activation_48").output
-    
+
     corr5 = CorrelationCost(pad=max_distance,
                             kernel_size=1,
                             max_displacement=max_distance,
@@ -612,7 +612,7 @@ def csse_resnet50_fpn_multi_corr_all(input_shape, channels=1, activation="sigmoi
     conv4 = csse_block(conv4, "csse_39")
     resnet_base.get_layer("res5a_branch2a")(conv4)
     conv5 = resnet_base.get_layer("activation_48").output
-    
+
     corr5 = CorrelationCost(pad=max_distance,
                             kernel_size=1,
                             max_displacement=max_distance,
