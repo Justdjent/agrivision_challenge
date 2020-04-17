@@ -36,6 +36,7 @@ arg('--weights')
 arg('--freeze_till_layer', default='input_1')
 arg('--show_summary', type=bool, default=False)
 arg('--network', default='instance_unet')
+arg('--do_postprocess', action='store_true')
 
 arg('--net_alias', default='')
 arg('--loss_function', default='')

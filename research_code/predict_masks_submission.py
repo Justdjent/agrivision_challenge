@@ -12,7 +12,7 @@ from research_code.evaluate import iou
 from tqdm import tqdm
 tqdm.monitor_interval = 0
 from collections import OrderedDict
-
+from research_code.postprocess import postprocess
 # from research_code.random_transform_mask import pad_size, unpad
 from research_code.utils import calculate_ndvi
 
@@ -90,18 +90,21 @@ def generate_submission(thresh, weights_path):
         # preds = model.predict_on_batch(batch_x)
         mixed_prediction = np.zeros((img.shape[0], img.shape[1]))
         #for num, pred in enumerate(preds):
-        for num in range(len(class_names)):
+        for num, cname in enumerate(class_names):
             # print(pred.max())
             bin_mask = (preds[0, :, :, num] * 255).astype(np.uint8)
-            # print(bin_mask.max())
-            bin_mask = bin_mask > (thresh * 255)
+            if (cname in ["planter_skip", "double_plant"]) and args.do_postprocess:
+                bin_mask = postprocess(bin_mask)
+                bin_mask = bin_mask > 0
+            else:
+                bin_mask = bin_mask > (thresh * 255)
             mixed_prediction[bin_mask] = num + 1
             # print(np.unique(mixed_prediction))
         # os.makedirs(output_dir, exist_ok=True)
         save_path_masks = os.path.join(output_dir, img_name.replace(".jpg", ".png"))
         cv2.imwrite(save_path_masks, mixed_prediction)
         pbar.update(1)
-    
+
     shutil.make_archive(output_filename, 'zip', output_dir)
 
 if __name__ == '__main__':
