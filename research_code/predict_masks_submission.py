@@ -15,32 +15,9 @@ from collections import OrderedDict
 
 # from research_code.random_transform_mask import pad_size, unpad
 from research_code.utils import calculate_ndvi
-
+from research_code.predict_masks import run_tta, run_model
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 # prediction_dir = args.pred_mask_dir
-
-
-def do_tta(x, tta_type):
-    if tta_type == 'hflip':
-        # batch, img_col = 2
-        return tf.image.flip_axis(x, 2)
-    else:
-        return x
-
-def undo_tta(pred, tta_type):
-    if tta_type == 'hflip':
-        # batch, img_col = 2
-        return tf.image.flip_axis(pred, 2)
-    else:
-        return pred
-
-
-def get_new_shape(img_shape, max_shape=224):
-    if img_shape[0] > img_shape[1]:
-        new_shape = (max_shape, int(img_shape[1] * max_shape / img_shape[0]))
-    else:
-        new_shape = (int(img_shape[0] * max_shape / img_shape[1]), max_shape)
-    return new_shape
 
 
 def generate_submission(thresh, weights_path):
@@ -80,19 +57,20 @@ def generate_submission(thresh, weights_path):
                 img = np.concatenate([img, nir_img], axis=-1)
                 # img = nir_img
                 # img, pads = pad_size(img)
-        x = np.expand_dims(img, axis=0)
-        x = imagenet_utils.preprocess_input(x,  'channels_last', mode='tf')
+                x = img
         # batch_x = x
-        if args.add_classification_head:
-            preds, _ = model.predict(x)
+
+        if args.tta:
+            preds = run_tta(x, model, args.add_classification_head)
         else:
-            preds = model.predict(x)
+            preds = run_model(model, x, args.add_classification_head)
+
         # preds = model.predict_on_batch(batch_x)
         mixed_prediction = np.zeros((img.shape[0], img.shape[1]))
         #for num, pred in enumerate(preds):
         for num in range(len(class_names)):
             # print(pred.max())
-            bin_mask = (preds[0, :, :, num] * 255).astype(np.uint8)
+            bin_mask = (preds[:, :, num] * 255).astype(np.uint8)
             # print(bin_mask.max())
             bin_mask = bin_mask > (thresh * 255)
             mixed_prediction[bin_mask] = num + 1
@@ -101,7 +79,7 @@ def generate_submission(thresh, weights_path):
         save_path_masks = os.path.join(output_dir, img_name.replace(".jpg", ".png"))
         cv2.imwrite(save_path_masks, mixed_prediction)
         pbar.update(1)
-    
+
     shutil.make_archive(output_filename, 'zip', output_dir)
 
 if __name__ == '__main__':
