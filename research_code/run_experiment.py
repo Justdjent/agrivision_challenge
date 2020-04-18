@@ -106,6 +106,7 @@ def precompute_background_class(test_dir: str, test_df: pd.DataFrame, class_name
 
 
 def run_experiment():
+    prediction_only = True
     dataset_df = pd.read_csv(args.dataset_df)
     classes = list(args.class_names)
     if 'background' in classes:
@@ -117,7 +118,12 @@ def run_experiment():
         generate_ndvi(ds_dir, df)
         generate_ndwi(ds_dir, df)
 
-    experiment_dir, model_dir, experiment_name = train()
+    if not prediction_only:
+        experiment_dir, model_dir, experiment_name = train()
+    else:
+        experiment_dir = args.experiments_dir
+        experiment_name = args.exp_name
+        model_dir = os.path.join(args.experiments_dir, experiment_name, "models")
     prediction_dir = os.path.join(experiment_dir, "predictions")
     best_model_name = find_best_model(model_dir)
     weights_path = os.path.join(model_dir, best_model_name)
