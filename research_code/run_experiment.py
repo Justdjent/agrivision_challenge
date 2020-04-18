@@ -121,7 +121,7 @@ def run_experiment():
     if not prediction_only:
         experiment_dir, model_dir, experiment_name = train()
     else:
-        experiment_dir = args.experiments_dir
+        experiment_dir = os.path.join(args.experiments_dir, experiment_name)
         experiment_name = args.exp_name
         model_dir = os.path.join(args.experiments_dir, experiment_name, "models")
     prediction_dir = os.path.join(experiment_dir, "predictions")
