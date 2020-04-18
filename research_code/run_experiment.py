@@ -110,12 +110,13 @@ def run_experiment():
     classes = list(args.class_names)
     if 'background' in classes:
         classes.remove('background')
-    for ds_part, ds_dir in zip(['train', 'val'], [args.train_dir, args.val_dir]):
-        df = dataset_df
-        precompute_background_class(ds_dir, df, classes)
-        generate_lightness(ds_dir, df)
-        generate_ndvi(ds_dir, df)
-        generate_ndwi(ds_dir, df)
+    if not args.train_ensemble:
+        for ds_part, ds_dir in zip(['train', 'val'], [args.train_dir, args.val_dir]):
+            df = dataset_df
+            precompute_background_class(ds_dir, df, classes)
+            generate_lightness(ds_dir, df)
+            generate_ndvi(ds_dir, df)
+            generate_ndwi(ds_dir, df)
 
     experiment_dir, model_dir, experiment_name = train()
     prediction_dir = os.path.join(experiment_dir, "predictions")

@@ -65,29 +65,52 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
         :param add_classification_head: Flag if model was trained with additional head for classification task
         :return:
     """
-
+    setup_env()
     output_dir = os.path.join(experiment_dir, "predictions")
     os.makedirs(output_dir, exist_ok=True)
-    model = make_model((None, None, len(input_channels)),
-                       network=network,
-                       channels=len(args.class_names),
-                       activation=args.activation,
-                       add_classification_head=args.add_classification_head,
-                       classes=args.class_names)
+    if args.train_ensemble:
+        model = make_model((None, None, len(args.class_names)),
+                           network=args.network,
+                           channels=len(args.class_names),
+                           activation=args.activation,
+                           add_classification_head=args.add_classification_head,
+                           classes=args.class_names,
+                           number_of_models=len(args.model_names))
+    else:
+        model = make_model((None, None, len(args.channels)),
+                           network=args.network,
+                           channels=len(args.class_names),
+                           activation=args.activation,
+                           add_classification_head=args.add_classification_head,
+                           classes=args.class_names)
     model.load_weights(weights_path)
     test_df = pd.read_csv(test_df_path)
     test_df = test_df[test_df['ds_part'] == 'val']
     nbr_test_samples = len(test_df)
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):
-        x = read_channels(input_channels, row["name"], test_data_dir)
-        x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
-        x = np.expand_dims(x, axis=0)
+        if not args.train_ensemble:
+            x = read_channels(input_channels, row["name"], test_data_dir)
+            x = imagenet_utils.preprocess_input(x, 'channels_last', mode='tf')
+            x = np.expand_dims(x, axis=0)
+        else:
+            channels = []
+            for model_name in args.model_names:
+                model_prediction = []
+                for class_name in args.class_names:
+                    path = os.path.join(args.experiments_dir, model_name, "predictions", class_name, row["name"])
+                    model_class_prediction = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+                    model_prediction.append(model_class_prediction)
+                channels.append(np.array(model_prediction).transpose([1, 2, 0]))
+            x = np.array(channels)
+            x = np.expand_dims(x, axis=0)
+
         if add_classification_head:
             preds, _ = model.predict(x)
         else:
             preds = model.predict(x)
+        preds = np.squeeze(preds)
         for num in range(len(class_names)):
-            bin_mask = (preds[0, :, :, num] * 255).astype(np.uint8)
+            bin_mask = (preds[:, :, num] * 255).astype(np.uint8)
             cur_class = class_names[num]
             filename = row['name']
             save_folder_masks = os.path.join(output_dir, cur_class)
@@ -96,6 +119,7 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
             cv2.imwrite(save_path_masks, bin_mask)
     del model
     tf.keras.backend.clear_session()
+
 
 if __name__ == '__main__':
     setup_env()

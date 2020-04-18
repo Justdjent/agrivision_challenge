@@ -5,7 +5,8 @@ import tensorflow as tf
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
-from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorClassificationHead
+from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorClassificationHead, \
+    DataGeneratorEnsemble
 from research_code.losses import make_loss, dice_coef, dice_without_background
 from research_code.models import make_model
 from research_code.params import args
@@ -18,7 +19,7 @@ def setup_env():
         try:
             # Currently, memory growth needs to be the same across GPUs
             for gpu in gpus:
-                # tf.config.experimental.set_memory_growth(gpu, True)
+                tf.config.experimental.set_memory_growth(gpu, True)
                 logical_gpus = tf.config.experimental.list_logical_devices('GPU')
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:
@@ -50,13 +51,21 @@ def train():
         '-{epoch:d}-{val_loss:0.7f}.h5'
     ch = 3
     activation = args.activation
-    model = make_model((None, None, len(args.channels)),
-                       network=args.network,
-                       channels=len(args.class_names),
-                       activation=activation,
-                       add_classification_head=args.add_classification_head,
-                       classes=args.class_names)
-
+    if args.train_ensemble:
+        model = make_model((None, None, len(args.class_names)),
+                           network=args.network,
+                           channels=len(args.class_names),
+                           activation=activation,
+                           add_classification_head=args.add_classification_head,
+                           classes=args.class_names,
+                           number_of_models=len(args.model_names))
+    else:
+        model = make_model((None, None, len(args.channels)),
+                           network=args.network,
+                           channels=len(args.class_names),
+                           activation=activation,
+                           add_classification_head=args.add_classification_head,
+                           classes=args.class_names)
     freeze_model(model, args.freeze_till_layer)
     if args.weights is None:
         print('No weights passed, training from scratch')
@@ -125,12 +134,20 @@ def train():
         dataset_df = dataset_df[~dataset_df['invalid']]
     print("Total df size {} after cleaning".format(len(dataset_df)))
     train_df = dataset_df[dataset_df["ds_part"] == "train"]
-    
+
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
     print('{} in train_ids, {} in val_ids, total {}'.format(len(train_df), len(val_df), len(train_df) + len(val_df)))
 
+    additional_args = {}
+    if args.train_ensemble:
+        generator_class = DataGeneratorEnsemble
+        additional_args = {
+            "model_names": args.model_names,
+            "experiments_dir": args.experiments_dir
+        }
+
     train_generator = generator_class(
-        train_df,
+        dataset_df=train_df,
         classes=args.class_names,
         img_dir=train_dir,
         batch_size=args.batch_size,
@@ -140,21 +157,23 @@ def train():
         do_aug=args.use_aug,
         validate_pixels=True,
         activation=activation,
-        channels=args.channels
+        channels=args.channels,
+        **additional_args
     )
 
     val_generator = generator_class(
-        val_df,
+        dataset_df=val_df,
         classes=args.class_names,
         img_dir=val_dir,
-        batch_size=args.batch_size//4,
+        batch_size=args.batch_size // 4,
         shuffle=True,
         reshape_size=(args.reshape_height, args.reshape_width),
         crop_size=crop_size,
         do_aug=False,
         validate_pixels=True,
         activation=activation,
-        channels=args.channels
+        channels=args.channels,
+        **additional_args
     )
 
     best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
@@ -175,7 +194,7 @@ def train():
         validation_data=val_generator,
         validation_steps=len(val_df) / args.batch_size + 1,
         callbacks=callbacks,
-        max_queue_size=32,
+        max_queue_size=8,
         workers=4)
 
     del model

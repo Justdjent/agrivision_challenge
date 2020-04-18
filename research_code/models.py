@@ -1,7 +1,7 @@
 from keras.applications.vgg16 import VGG16
 from tensorflow.keras import Input
 from tensorflow.keras import Model
-from tensorflow.keras.layers import Conv2D, UpSampling2D, Conv2DTranspose, ConvLSTM2D, Flatten, Conv3D
+from tensorflow.keras.layers import Conv2D, UpSampling2D, Conv2DTranspose, ConvLSTM2D, Flatten, Conv3D, Reshape
 from tensorflow.keras.layers import Activation, SpatialDropout2D
 from tensorflow.keras.layers import concatenate
 from tensorflow.keras.layers import Dense, Multiply, Add, Lambda, GlobalAveragePooling2D
@@ -12,6 +12,7 @@ import tensorflow as tf
 from tensorflow_addons.layers import CorrelationCost
 
 import segmentation_models as sm
+
 sm.set_framework('tf.keras')
 
 from research_code.resnet50_fixed import ResNet50, ResNet50_multi
@@ -425,7 +426,8 @@ def csse_resnet50_fpn_multi(input_shape, channels=1, activation="sigmoid"):
 
 def get_effnetb0_multi(input_shape, channels=1, activation="sigmoid"):
     effnet_input = tuple([input_shape[0], input_shape[1], 3])
-    effnet_base = sm.Unet('efficientnetb0',input_shape=input_shape, classes=channels, activation=activation, encoder_weights=None)
+    effnet_base = sm.Unet('efficientnetb0', input_shape=input_shape, classes=channels, activation=activation,
+                          encoder_weights=None)
     effnet_base_we = sm.Unet('efficientnetb0', input_shape=effnet_input, classes=channels, activation=activation)
 
     # EfficientNet stem doesn't have bias
@@ -455,7 +457,8 @@ def get_effnetb0_multi(input_shape, channels=1, activation="sigmoid"):
 
 def get_effnetb0_multi_corr(input_shape, channels=1, activation="sigmoid", max_distance=3):
     effnet_input = tuple([input_shape[0], input_shape[1], 3])
-    effnet_base = sm.Unet('efficientnetb0',input_shape=input_shape, classes=channels, activation=activation, encoder_weights=None)
+    effnet_base = sm.Unet('efficientnetb0', input_shape=input_shape, classes=channels, activation=activation,
+                          encoder_weights=None)
     effnet_base_we = sm.Unet('efficientnetb0', input_shape=effnet_input, classes=channels, activation=activation)
 
     # EfficientNet stem doesn't have bias
@@ -477,11 +480,11 @@ def get_effnetb0_multi_corr(input_shape, channels=1, activation="sigmoid", max_d
 
     bottleneck = effnet_base.get_layer("top_activation").output
     corr = CorrelationCost(pad=max_distance,
-                        kernel_size=1,
-                        max_displacement=max_distance,
-                        stride_1=1,
-                        stride_2=4,
-                        data_format="channels_last")([bottleneck, bottleneck])
+                           kernel_size=1,
+                           max_displacement=max_distance,
+                           stride_1=1,
+                           stride_2=4,
+                           data_format="channels_last")([bottleneck, bottleneck])
     bottleneck = concatenate([bottleneck, corr], axis=-1)
 
     effnet_base.get_layer("decoder_stage0_upsampling")(bottleneck)
@@ -494,82 +497,13 @@ def get_effnetb0_multi_corr(input_shape, channels=1, activation="sigmoid", max_d
     return effnet_base
 
 
-def csse_resnet50_fpn_multi_corr(input_shape, channels=1, activation="sigmoid"):
-    max_distance = 20
-    resnet_input = tuple([input_shape[0], input_shape[1], 3])
-    resnet_base = ResNet50(input_shape=input_shape, include_top=False, weights=None)
-    resnet_base_we = ResNet50_multi(input_shape=resnet_input, include_top=False)
-
-    conv_weights, conv_bias = resnet_base_we.layers[1].get_weights()
-    # getting new_weights
-    new_weights = np.random.normal(size=(7, 7, input_shape[-1], 64), loc=0, scale=0.2)
-    new_weights[:, :, :3, :] = conv_weights
-
-    for i in resnet_base_we.layers:
-        if i.name == 'conv1':
-            resnet_base.get_layer(i.name).set_weights([new_weights, conv_bias])
-        try:
-            resnet_base.get_layer(i.name).set_weights(resnet_base_we.get_layer(i.name).get_weights())
-        except:
-            continue
-    del resnet_base_we
-    if args.show_summary:
-        resnet_base.summary()
-
-    for l in resnet_base.layers:
-        l.trainable = True
-
-    conv1 = resnet_base.get_layer("activation").output
-    conv1 = csse_block(conv1, "csse_1")
-    resnet_base.get_layer("max_pooling2d")(conv1)
-    conv2 = resnet_base.get_layer("activation_9").output
-    conv2 = csse_block(conv2, "csse_ngle_net9")
-    resnet_base.get_layer("res3a_branch2a")(conv2)
-    conv3 = resnet_base.get_layer("activation_21").output
-    conv3 = csse_block(conv3, "csse_21")
-    resnet_base.get_layer("res4a_branch2a")(conv3)
-    conv4 = resnet_base.get_layer("activation_39").output
-    conv4 = csse_block(conv4, "csse_39")
-    resnet_base.get_layer("res5a_branch2a")(conv4)
-    conv5 = resnet_base.get_layer("activation_48").output
-    
-    corr5 = CorrelationCost(pad=max_distance,
-                            kernel_size=1,
-                            max_displacement=max_distance,
-                            stride_1=1,
-                            stride_2=4,
-                            data_format="channels_last")([conv5, conv5])
-    conv5 = concatenate([conv5, corr5], axis=-1)
-    conv5 = csse_block(conv5, "csse_48")
-
-    P1, P2, P3, P4, P5 = create_pyramid_features(conv1, conv2, conv3, conv4, conv5)
-    x = concatenate(
-        [
-            csse_block(prediction_fpn_block(P5, "P5", (8, 8)), "csse_P5"),
-            csse_block(prediction_fpn_block(P4, "P4", (4, 4)), "csse_P4"),
-            csse_block(prediction_fpn_block(P3, "P3", (2, 2)), "csse_P3"),
-            csse_block(prediction_fpn_block(P2, "P2"), "csse_P2"),
-        ]
-    )
-    x = conv_bn_relu(x, 256, 3, (1, 1), name="aggregation")
-    x = decoder_block_no_bn(x, 128, conv1, 'up4')
-    x = UpSampling2D()(x)
-    x = conv_relu(x, 64, 3, (1, 1), name="up5_conv1")
-    x = conv_relu(x, 64, 3, (1, 1), name="up5_conv2")
-    x = Conv2D(channels, (1, 1), activation=activation, name="mask")(x)
-
-    model = Model(resnet_base.input, x)
-
-    return model
-
-
 def add_corr(inp_layer, corr_rad):
     corr_tensor = CorrelationCost(pad=corr_rad,
-                            kernel_size=1,
-                            max_displacement=corr_rad,
-                            stride_1=1,
-                            stride_2=4,
-                            data_format="channels_last")([inp_layer, inp_layer])
+                                  kernel_size=1,
+                                  max_displacement=corr_rad,
+                                  stride_1=1,
+                                  stride_2=4,
+                                  data_format="channels_last")([inp_layer, inp_layer])
     inp_layer = concatenate([inp_layer, corr_tensor], axis=-1)
     return inp_layer
 
@@ -612,7 +546,7 @@ def csse_resnet50_fpn_multi_corr_all(input_shape, channels=1, activation="sigmoi
     conv4 = csse_block(conv4, "csse_39")
     resnet_base.get_layer("res5a_branch2a")(conv4)
     conv5 = resnet_base.get_layer("activation_48").output
-    
+
     corr5 = CorrelationCost(pad=max_distance,
                             kernel_size=1,
                             max_displacement=max_distance,
@@ -624,8 +558,7 @@ def csse_resnet50_fpn_multi_corr_all(input_shape, channels=1, activation="sigmoi
     conv2 = add_corr(conv2, max_distance * 8)
     conv3 = add_corr(conv3, max_distance * 4)
     conv4 = add_corr(conv4, max_distance * 2)
-    #conv1 = add_corr(conv1, max_distance * 16)
-
+    # conv1 = add_corr(conv1, max_distance * 16)
 
     P1, P2, P3, P4, P5 = create_pyramid_features(conv1, conv2, conv3, conv4, conv5)
     x = concatenate(
@@ -1221,6 +1154,18 @@ def get_traj_conv_lstm(img_input_shape, point_input_shape):
     return model
 
 
+def get_ensembling_model(input_shape, channels=1, activation="sigmoid", number_of_models=2):
+    input_data = Input((number_of_models, *input_shape), name="models_output")
+    # (batch, models, h, w, classes) -> (batch, 1, h, w, classes)
+    conv = Conv3D(channels, (number_of_models, 1, 1), activation=activation, name="weighted_avg")(input_data)
+    # (batch, 1, h, w, classes)
+    model = Model(inputs=[input_data], outputs=[conv], name="ensemble")
+    if args.show_summary:
+        model.summary()
+
+    return model
+
+
 def add_classification_head(segmentation_model, encoder_output_name, channels):
     encoder_output = segmentation_model.get_layer(encoder_output_name).output
     x = GlobalAveragePooling2D(name="avg_pool_classification_head")(encoder_output)
@@ -1238,7 +1183,7 @@ def make_model(input_shape, network, **kwargs):
         if "effnetb0" in network:
             encoder_output_name = "top_activation"
         else:
-            encoder_output_name ="activation_48"
+            encoder_output_name = "activation_48"
         # currently supports only resnet50 architecture
         segmentation_model_with_cls_head = add_classification_head(segmentation_model,
                                                                    encoder_output_name=encoder_output_name,
@@ -1283,6 +1228,8 @@ def make_model(input_shape, network, **kwargs):
         return get_effnetb0_multi(input_shape, **kwargs)
     elif network == "effnetb0_multi_corr":
         return get_effnetb0_multi_corr(input_shape, **kwargs)
+    elif network == "ensemble":
+        return get_ensembling_model(input_shape, **kwargs)
 
     elif network == "angle_net":
         return get_angle_net(input_shape)

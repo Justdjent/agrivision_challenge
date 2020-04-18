@@ -30,10 +30,10 @@ def harsh_aug(crop_size=(512, 512), borders=cv2.BORDER_CONSTANT):
         albu.VerticalFlip(p=0.2),
         albu.Transpose(p=0.2),
 
-        #Scaling
+        # Scaling
         albu.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2, border_mode=borders),
-        albu.PadIfNeeded(512,512, border_mode=borders, always_apply=True),
-        albu.CenterCrop(512,512, always_apply=True),
+        albu.PadIfNeeded(512, 512, border_mode=borders, always_apply=True),
+        albu.CenterCrop(512, 512, always_apply=True),
 
         # Non-rigid
         albu.ElasticTransform(p=0.2, border_mode=borders),
@@ -345,3 +345,67 @@ class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
         if 'background' in self.classes:
             classes = classes[:, :-1]
         return batch_x, [batch_y, classes]
+
+
+class DataGeneratorEnsemble(DataGeneratorSingleOutput):
+    def __init__(self,
+                 dataset_df,
+                 classes,
+                 img_dir=None,
+                 batch_size=None,
+                 shuffle=False,
+                 reshape_size=None,
+                 crop_size=None,
+                 do_aug=False,
+                 activation=None,
+                 validate_pixels=True,
+                 channels=None, model_names: List[str] = None, experiments_dir=None):
+        'Initialization'
+        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug, activation,
+                         validate_pixels, channels)
+        self.model_names = model_names
+        self.number_of_models = len(model_names)
+        self.experiments_dir = experiments_dir
+
+    def _data_generation(self, list_IDs_temp):
+        'Generates data containing batch_size samples'  # X : (n_samples, *dim, n_channels)
+        # Initialization
+        train_batch = list_IDs_temp
+        batch_x = []
+        batch_y = []
+
+        for ind, item_data in train_batch.iterrows():
+            channels = []
+            img_name = item_data["name"]
+
+            for model in self.model_names:
+                model_prediction = []
+                for class_name in self.classes:
+                    path = os.path.join(self.experiments_dir, model, "predictions", class_name, img_name)
+                    model_class_prediction = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+                    model_prediction.append(model_class_prediction)
+                channels.append(np.array(model_prediction).transpose([1, 2, 0]))
+            channels = np.array(channels)
+
+            if self.validate_pixels:
+                not_valid_mask = self.read_masks_borders(item_data['name'])
+            else:
+                not_valid_mask = np.zeros((channels.shape[0], channels.shape[1]), dtype=np.bool)
+            # (models, *dim, classes)
+            channels[:, not_valid_mask, :] = 0
+            targets = np.zeros((channels.shape[1], channels.shape[2], len(self.classes)))
+            for idx, cls in enumerate(self.classes):
+                mask_path = os.path.join(self.img_dir, 'labels', cls, item_data['name'])
+                mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
+                mask[not_valid_mask] = 0
+                mask = mask > 0
+                targets[:, :, idx] = mask
+            targets = np.expand_dims(targets, axis=0)
+
+            batch_y.append(targets)
+            batch_x.append(channels)
+
+        batch_x = np.array(batch_x, np.float32)
+        batch_y = np.array(batch_y, np.float32)
+
+        return batch_x, batch_y

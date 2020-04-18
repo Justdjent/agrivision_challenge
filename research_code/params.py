@@ -54,4 +54,6 @@ arg('--cls_head_loss_weight', '-cw', default=0.2)
 
 arg('--channels', nargs='+', default=['r', 'g', 'b', 'nir', 'ndvi', 'ndwi', 'l'])
 
+arg('--train_ensemble', action='store_true')
+arg('--model_names', nargs='+')
 args = parser.parse_args()
