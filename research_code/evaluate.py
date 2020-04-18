@@ -176,10 +176,16 @@ class Evaluator:
         self.test_dir = test_dir
         self.experiment_dir = experiment_dir
         self.threshold = threshold
+        self.thresholds = {'planter_skip': 0.1,
+                           'cloud_shadow': 0.4,
+                           'double_plant': 0.4,
+                           'standing_water': 0.4,
+                           'waterway': 0.7,
+                           'weed_cluster': 0.4}
         self.test_df_path = test_df_path
         self.class_names = class_names
         self.class_names = self.class_names + ['background']
-        self.prediction_dir = self.experiment_dir #os.path.join(experiment_dir, "predictions")
+        self.prediction_dir = os.path.join(experiment_dir, "predictions")
 
     def process_data(self, data, num_cores=4, parallel=True):
         """
@@ -211,7 +217,6 @@ class Evaluator:
         return confusion_matrix_full, df_merged
 
     def evaluate_df(self, test_df):
-        # class_names = self.class_names + ['background']
         df = pd.DataFrame(columns=self.class_names + ['name'])
         num_classes = len(self.class_names)
         confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.uint64)
@@ -240,7 +245,6 @@ class Evaluator:
                     prediction = np.logical_not(background_prediction)
                 else:
                     prediction_path = os.path.join(self.prediction_dir, class_name, filename)
-                    # print(prediction_path)
                     prediction = cv2.imread(prediction_path, cv2.IMREAD_GRAYSCALE)
                     prediction = (prediction / 255)
                     prediction[prediction < self.threshold] = 0
@@ -282,6 +286,19 @@ class Evaluator:
         with open(os.path.join(self.prediction_dir, f"{output_filename}_mean_ious.json"), 'w') as f:
             json.dump(class_ious, f)
         df.to_csv(os.path.join(self.prediction_dir, output_csv), index=False)
+        return x_title
+
+    def get_best_threshold(self):
+        threshlds = np.linspace(0.1, 0.9, 9)
+        mean_ios = []
+        for thresh in threshlds:
+            self.threshold = thresh
+            thresh_mean_iou = self.evaluate_multiprocess()
+            mean_ios.append(thresh_mean_iou)
+            print("thresh: {}, mean_iou: ".format(thresh) + thresh_mean_iou)
+
+        for thresh, mean_iou in zip(threshlds, mean_ios):
+            print("thresh: {}, mean_iou: ".format(thresh) + mean_iou)
 
 
 if __name__ == '__main__':
@@ -291,6 +308,7 @@ if __name__ == '__main__':
              threshold=args.threshold,
              class_names=args.class_names)
     evaluator.evaluate_multiprocess()
+    # evaluator.get_best_threshold()
     # evaluate(test_dir=args.val_dir,
     #          experiment_dir=args.experiments_dir,
     #          test_df_path=args.dataset_df,
