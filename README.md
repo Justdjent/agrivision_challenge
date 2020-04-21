@@ -42,4 +42,4 @@ You can run `train.py` to train the model.
 `evaluate.py` to calculate mIoU metric for validation  
 `predict_masks_submission.py` to generate the submission file
 
-Careful, `predict_masks.py` and `evaluate.py` expect the `--experiments_dir` paramenter to be a path to your *current* experiment and `--weghts` paramenter -- the path to the evaluated model's weights.
+> Careful, `predict_masks.py` and `evaluate.py` expect the `--experiments_dir` paramenter to be a path to your *current* experiment and `--weghts` paramenter -- the path to the evaluated model's weights.
