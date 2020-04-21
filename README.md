@@ -35,3 +35,11 @@ The following cli params are available:
 * `--add_classification_head` whether to add a classification head to the chosen model
 * `--cls_head_loss_weight` a weight for the classification head's loss function
 * `--channels` a list of channels to use as inputs, channels are calculated by `run_experiment.py` on the first run only.
+
+Some parts of the pipeline can be run separately.  
+You can run `train.py` to train the model.  
+`predict_masks.py` to generate predictions for validaiton  
+`evaluate.py` to calculate mIoU metric for validation  
+`predict_masks_submission.py` to generate the submission file
+
+Careful, `predict_masks.py` and `evaluate.py` expect the `--experiments_dir` paramenter to be a path to your *current* experiment and `--weghts` paramenter -- the path to the evaluated model's weights.
