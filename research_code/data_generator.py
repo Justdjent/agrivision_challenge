@@ -30,10 +30,10 @@ def harsh_aug(crop_size=(512, 512), borders=cv2.BORDER_CONSTANT):
         albu.VerticalFlip(p=0.2),
         albu.Transpose(p=0.2),
 
-        #Scaling
+        # Scaling
         albu.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2, border_mode=borders),
-        albu.PadIfNeeded(512,512, border_mode=borders, always_apply=True),
-        albu.CenterCrop(512,512, always_apply=True),
+        albu.PadIfNeeded(512, 512, border_mode=borders, always_apply=True),
+        albu.CenterCrop(512, 512, always_apply=True),
 
         # Non-rigid
         albu.ElasticTransform(p=0.2, border_mode=borders),
@@ -136,6 +136,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
             reshape_size=None,
             crop_size=None,
             do_aug=False,
+            random_state=None
     ):
         "Initialization"
         self.dataset_df = dataset_df
@@ -148,13 +149,13 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         self.do_aug = do_aug
         self.aug = strong_aug(crop_size)
         self.reshape_func = reshape(reshape_size)
-
+        self.random_state = random_state
         self.on_epoch_end()
 
     def __len__(self):
         """Denotes the number of batches per epoch
         """
-        return int(np.floor(len(self.dataset_df) / self.batch_size))
+        return int(np.floor(len(self.dataset_df) / self.batch_size) + 1)
 
     def __getitem__(self, index):
         """Generate one batch of data
@@ -171,7 +172,7 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         """Shuffle the dataset on epoch end
         """
         if self.shuffle:
-            self.dataset_df = skl_shuffle(self.dataset_df)
+            self.dataset_df = skl_shuffle(self.dataset_df, random_state=self.random_state)
 
     def read_masks_borders(self, name):
         border_path = os.path.join(
@@ -251,9 +252,11 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
                  do_aug=False,
                  activation=None,
                  validate_pixels=True,
-                 channels=None):
+                 channels=None,
+                 random_state=None):
         'Initialization'
-        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug)
+        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug,
+                         random_state)
 
         if activation is None:
             raise ValueError("Please pick activation function!")
@@ -333,10 +336,11 @@ class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
                  do_aug=False,
                  activation=None,
                  validate_pixels=True,
-                 channels=None):
+                 channels=None,
+                 random_state=None):
         'Initialization'
         super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug, activation,
-                         validate_pixels, channels)
+                         validate_pixels, channels, random_state)
 
     def _data_generation(self, list_IDs_temp):
         'Generates data containing batch_size samples'

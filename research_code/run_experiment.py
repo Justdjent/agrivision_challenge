@@ -7,11 +7,12 @@ import pandas as pd
 from tqdm import tqdm
 from typing import List
 from research_code.params import args
-from research_code.train import train
+from research_code.train import train, is_primary
 from research_code.predict_masks import predict
 from research_code.evaluate import evaluate
 from research_code.predict_masks_submission import generate_submission
 from research_code.utils import calculate_ndvi, calculate_ndwi, calculate_lightness
+import horovod.tensorflow.keras as hvd
 
 
 def find_best_model(model_dir):
@@ -118,30 +119,32 @@ def run_experiment():
         generate_ndwi(ds_dir, df)
 
     experiment_dir, model_dir, experiment_name = train()
-    prediction_dir = os.path.join(experiment_dir, "predictions")
-    best_model_name = find_best_model(model_dir)
-    weights_path = os.path.join(model_dir, best_model_name)
+    # Run validation only on primary node
+    if is_primary():
+        prediction_dir = os.path.join(experiment_dir, "predictions")
+        best_model_name = find_best_model(model_dir)
+        weights_path = os.path.join(model_dir, best_model_name)
 
-    test_df_path = args.dataset_df
-    test_data_dir = args.val_dir
-    print(f"Starting prediction process. Using {best_model_name} for prediction")
-    predict(experiment_dir=experiment_dir,
-            class_names=args.class_names,
-            weights_path=weights_path,
-            test_df_path=test_df_path,
-            test_data_dir=test_data_dir,
-            input_channels=args.channels,
-            network=args.network,
-            add_classification_head=args.add_classification_head)
-    print(f"Starting evaluation process of results in {prediction_dir}")
-    evaluate(test_dir=test_data_dir,
-             experiment_dir=experiment_dir,
-             test_df_path=test_df_path,
-             threshold=args.threshold,
-             class_names=args.class_names)
+        test_df_path = args.dataset_df
+        test_data_dir = args.val_dir
+        print(f"Starting prediction process. Using {best_model_name} for prediction")
+        predict(experiment_dir=experiment_dir,
+                class_names=args.class_names,
+                weights_path=weights_path,
+                test_df_path=test_df_path,
+                test_data_dir=test_data_dir,
+                input_channels=args.channels,
+                network=args.network,
+                add_classification_head=args.add_classification_head)
+        print(f"Starting evaluation process of results in {prediction_dir}")
+        evaluate(test_dir=test_data_dir,
+                 experiment_dir=experiment_dir,
+                 test_df_path=test_df_path,
+                 threshold=args.threshold,
+                 class_names=args.class_names)
 
-    print("Generating submission")
-    generate_submission(thresh=args.threshold, weights_path=weights_path)
+        print("Generating submission")
+        generate_submission(thresh=args.threshold, weights_path=weights_path)
 
 
 if __name__ == "__main__":
