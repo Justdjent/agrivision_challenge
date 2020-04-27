@@ -203,8 +203,8 @@ def train():
                                          save_best_only=True,
                                          save_weights_only=True,
                                          mode='min'))
-        TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True,
-                    write_images=True)
+        callbacks.append(TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True,
+                                     write_images=True))
 
     verbose = 1 if is_primary() else 0
 
