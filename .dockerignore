@@ -1,0 +1,9 @@
+.git
+.ipynb_checkpoints
+notebooks
+Dockerfile
+dataset
+experiments
+.gitignore
+*.csv
+tmp
