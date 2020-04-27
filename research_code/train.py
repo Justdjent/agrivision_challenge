@@ -141,8 +141,6 @@ def train():
     val_df = dataset_df[dataset_df["ds_part"] == "val"]
     print('{} in train_ids, {} in val_ids, total {}'.format(len(train_df), len(val_df), len(train_df) + len(val_df)))
 
-    train_df = train_df[:100]
-    val_df = val_df[:100]
     train_records = len(train_df) // hvd.size()
     val_records = len(val_df) // hvd.size()
     train_df = train_df[hvd.rank() * train_records:(hvd.rank() + 1) * train_records]
