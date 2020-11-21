@@ -178,10 +178,22 @@ class Evaluator:
         self.threshold = threshold
         self.thresholds = {'planter_skip': 0.1,
                            'cloud_shadow': 0.4,
-                           'double_plant': 0.4,
-                           'standing_water': 0.4,
-                           'waterway': 0.7,
-                           'weed_cluster': 0.4}
+                           'double_plant': 0.3,
+                           'standing_water': 0.2,
+                           'waterway': 0.3, # 0.7 for tta
+                           'weed_cluster': 0.2}
+        # self.thresholds = {'planter_skip': 0.1,
+        #                    'cloud_shadow': 0.4,
+        #                    'double_plant': 0.4,
+        #                    'standing_water': 0.3,
+        #                    'waterway': 0.6, # 0.7 for tta
+        #                    'weed_cluster': 0.4}
+        # no_tta self.thresholds = {'planter_skip': 0.1,
+        #                    'cloud_shadow': 0.4,
+        #                    'double_plant': 0.4,
+        #                    'standing_water': 0.4,
+        #                    'waterway': 0.7,
+        #                    'weed_cluster': 0.4}
         self.test_df_path = test_df_path
         self.class_names = class_names
         self.class_names = self.class_names + ['background']
@@ -247,7 +259,7 @@ class Evaluator:
                     prediction_path = os.path.join(self.prediction_dir, class_name, filename)
                     prediction = cv2.imread(prediction_path, cv2.IMREAD_GRAYSCALE)
                     prediction = (prediction / 255)
-                    prediction[prediction < self.threshold] = 0
+                    prediction[prediction < self.thresholds.get(class_name)] = 0
                     background_prediction = np.logical_or(background_prediction, prediction)
                 ground_truths.append(ground_truth)
                 predictions.append(prediction)
