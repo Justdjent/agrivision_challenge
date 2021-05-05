@@ -173,9 +173,9 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         if self.shuffle:
             self.dataset_df = skl_shuffle(self.dataset_df)
 
-    def read_masks_borders(self, name):
+    def read_masks_borders(self, name, part):
         border_path = os.path.join(
-            self.img_dir, "boundaries", name.replace(".jpg", ".png")
+            self.img_dir, part, "boundaries", name.replace(".jpg", ".png")
         )
 
         border_img = cv2.imread(border_path, cv2.IMREAD_GRAYSCALE)
@@ -195,20 +195,20 @@ class DataGenerator_agrivision(tf.keras.utils.Sequence):
         batch_y = defaultdict(list)
 
         for ind, item_data in batch_data.iterrows():
-            img_path = os.path.join(self.img_dir, "images", "rgb", item_data["name"])
+            img_path = os.path.join(self.img_dir, item_data['ds_part'], "images", "rgb", item_data["name"])
             img = cv2.imread(img_path)
             try:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             except Exception as error:
                 print(img_path)
                 print(error)
-            not_valid_mask = self.read_masks_borders(item_data["name"])
+            not_valid_mask = self.read_masks_borders(item_data["name"], item_data['ds_part'])
             img[not_valid_mask] = 0
 
             # getmasks
             targets = np.zeros((img.shape[0], img.shape[1], len(self.classes)))
             for i, c in enumerate(self.classes):
-                mask_path = os.path.join(self.img_dir, "labels", c, item_data["name"])
+                mask_path = os.path.join(self.img_dir, item_data['ds_part'], "labels", c, item_data["name"])
                 mask = cv2.imread(
                     mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE
                 )
@@ -270,20 +270,21 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
         batch_y = []
 
         for ind, item_data in train_batch.iterrows():
-            channels = read_channels(self.channels, item_data["name"], self.img_dir)
+            channels = read_channels(self.channels, item_data["name"], os.path.join(self.img_dir, item_data['ds_part']))
 
             if self.validate_pixels:
-                not_valid_mask = self.read_masks_borders(item_data['name'])
+                not_valid_mask = self.read_masks_borders(item_data['name'], item_data['ds_part'])
             else:
                 not_valid_mask = np.zeros((channels.shape[0], channels.shape[1]), dtype=np.bool)
 
             channels[not_valid_mask] = 0
             targets = np.zeros((channels.shape[0], channels.shape[1], len(self.classes)))
             for idx, cls in enumerate(self.classes):
-                mask_path = os.path.join(self.img_dir, 'labels', cls, item_data['name'])
+                mask_path = os.path.join(self.img_dir, item_data['ds_part'], 'labels', cls, item_data['name'])
                 mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
                 mask[not_valid_mask] = 0
-                mask = mask > 0
+                # mask = mask > 0
+                mask = mask / 255
                 targets[:, :, idx] = mask
 
             res = self.reshape_func(image=channels, mask=targets)

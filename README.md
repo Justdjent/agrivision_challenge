@@ -43,3 +43,12 @@ You can run `train.py` to train the model.
 `predict_masks_submission.py` to generate the submission file
 
 > Careful, `predict_masks.py` and `evaluate.py` expect the `--experiments_dir` paramenter to be a path to your *current* experiment and `--weghts` paramenter -- the path to the evaluated model's weights.
+
+
+
+> run docker
+
+python research_code/run_experiment.py --network effnetb0_multi --batch_size 4 --epochs 100 --use_aug  --exp_name effnetb0_unet_softmax --activation softmax
+
+
+docker run -it --gpus all -v /hdd/ymi/agrivision-2021:/app agrivision:1 bash

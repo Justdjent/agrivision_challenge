@@ -25,6 +25,7 @@ def generate_submission(thresh, weights_path):
     output_filename = output_dir + ".zip"
     class_names = args.class_names
     os.makedirs(output_dir, exist_ok=True)
+    print(len(args.channels))
     model = make_model((None, None, len(args.channels)),
                        network=args.network,
                        channels=len(args.class_names),

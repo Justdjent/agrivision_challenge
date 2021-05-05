@@ -18,7 +18,7 @@ def setup_env():
         try:
             # Currently, memory growth needs to be the same across GPUs
             for gpu in gpus:
-                # tf.config.experimental.set_memory_growth(gpu, True)
+                tf.config.experimental.set_memory_growth(gpu, True)
                 logical_gpus = tf.config.experimental.list_logical_devices('GPU')
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:
@@ -124,6 +124,16 @@ def train():
         dataset_df['invalid'] = dataset_df['invalid'].fillna(False)
         dataset_df = dataset_df[~dataset_df['invalid']]
     print("Total df size {} after cleaning".format(len(dataset_df)))
+    print(len(dataset_df))
+    
+    # filter this
+    filtered = []
+    for cls_name in args.class_names:
+        ds_df = dataset_df[dataset_df[cls_name] > 0]
+        filtered.append(ds_df)
+    
+    dataset_df = pd.concat(filtered)
+    dataset_df.reset_index(drop=True, inplace=True)
     train_df = dataset_df[dataset_df["ds_part"] == "train"]
     
     val_df = dataset_df[dataset_df["ds_part"] == "val"]

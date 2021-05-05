@@ -276,11 +276,17 @@ def crossentropy_with_KL(y_true, y_pred):
     return bce + 0.3 * kl
 
 
+# def KL_to_uniform(y_pred):
+#     channels = 2
+#     y_pred = K.clip(y_pred, K.epsilon(), 1)
+#     uniform = K.ones_like(y_pred) / K.cast(channels, K.floatx())
+#     return uniform * K.log(uniform / y_pred)
+
+
 def KL_to_uniform(y_pred):
-    channels = 2
-    y_pred = K.clip(y_pred, K.epsilon(), 1)
-    uniform = K.ones_like(y_pred) / K.cast(channels, K.floatx())
-    return uniform * K.log(uniform / y_pred)
+   y_pred = K.clip(y_pred, 0.00001, 1)
+   uniform = K.ones_like(y_pred) / 2.0
+   return uniform * K.log(uniform / y_pred)
 
 
 def time_crossentropy(labels, pred):
@@ -318,6 +324,10 @@ def make_loss(loss_name):
         def loss(y, p):
             return dice_coef_loss_bce(y, p, dice=0.8, bce=0.2, bootstrapping='soft', alpha=0.95)
 
+        return loss
+    elif loss_name == 'bce_dice_kl':
+        def loss(y, p):
+            return dice_coef_loss_bce(y, p, dice=0.8, bce=0.2, bootstrapping='soft', alpha=1) + 0.5 * KL_to_uniform(p)
         return loss
     elif loss_name == 'boot_hard':
         def loss(y, p):

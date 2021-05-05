@@ -14,22 +14,22 @@ arg('--reshape_height', type=int, default=512)
 arg('--reshape_width', type=int, default=512)
 
 # crop is last
-arg('--crop_height', type=int, default=256)
-arg('--crop_width', type=int, default=256)
+arg('--crop_height', type=int, default=448)
+arg('--crop_width', type=int, default=448)
 arg('--use_crop', type=distutils.util.strtobool, default='true')
 
 arg('--learning_rate', type=float, default=0.001)
 arg('--batch_size', type=int, default=1)
 
 #TODO Merge train and val
-arg('--train_dir', default='/mnt/storage/cal/data/agrivision/train')
-arg('--val_dir', default='/mnt/storage/cal/data/agrivision/val')
-arg('--test_dir', default='/mnt/storage/cal/data/agrivision/val')
-arg('--dataset_df', default='/mnt/storage/cal/data/agrivision/train_val_initial_2020-03-25.csv')
+arg('--train_dir', default='/data/supervised/Agriculture-Vision-2021')
+arg('--val_dir', default='/data/supervised/Agriculture-Vision-2021')
+arg('--test_dir', default='/data/supervised/Agriculture-Vision-2021')
+arg('--dataset_df', default='/data/supervised/train_val_initial_2020-04-23.csv')
 arg('--exclude_bad_labels_df')
 
-arg('--experiments_dir', default='/mnt/storage/cal/artifacts/agrivision')
-arg('--class_names', nargs='+', default=['cloud_shadow', 'double_plant', 'planter_skip', 'standing_water', 'waterway', 'weed_cluster'])
+arg('--experiments_dir', default='/data/supervised/artifacts')
+arg('--class_names', nargs='+', default=['double_plant', 'planter_skip', 'water', 'waterway', 'weed_cluster', 'nutrient_deficiency', 'drydown', 'endrow', 'storm_damage'])
 arg('--models_dir', default='models')
 arg('--log_dir', default='logs')
 arg('--weights')
@@ -49,10 +49,11 @@ arg('--exp_name')
 arg('--coord_conv', type=bool, default=False)
 arg('--use_aug', action='store_true')
 arg('--tta', action='store_true')
+arg('--prediction_only', action='store_true')
 arg('--activation', default='sigmoid', choices=['sigmoid', 'softmax'])
 arg('--add_classification_head', action='store_true')
 arg('--cls_head_loss_weight', '-cw', default=0.2)
 
-arg('--channels', nargs='+', default=['r', 'g', 'b', 'nir', 'ndvi', 'ndwi', 'l'])
+arg('--channels', nargs='+', default=['r', 'g', 'b', 'nir', 'ndvi'])
 
 args = parser.parse_args()

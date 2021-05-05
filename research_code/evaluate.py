@@ -137,6 +137,7 @@ def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: f
                 ground_truth = (ground_truth  > 0)
             except:
                 print(ground_truth_path)
+                raise
             if class_name == 'background':
                 prediction = np.logical_not(background_prediction)
             else:
@@ -222,9 +223,9 @@ class Evaluator:
         confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.uint64)
         for idx, row in test_df.iterrows():
             filename = row['name']
-            boundary_path = os.path.join(self.test_dir, "boundaries", filename.replace('.jpg', '.png'))
+            boundary_path = os.path.join(self.test_dir, row['ds_part'], "boundaries", filename.replace('.jpg', '.png'))
             boundary = cv2.imread(boundary_path, cv2.IMREAD_GRAYSCALE).astype(bool)
-            mask_path = os.path.join(self.test_dir, "masks", filename.replace('.jpg', '.png'))
+            mask_path = os.path.join(self.test_dir, row['ds_part'], "masks", filename.replace('.jpg', '.png'))
             if os.path.exists(mask_path):
                 invalid_pixels_mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE).astype(bool)
             else:
@@ -235,10 +236,10 @@ class Evaluator:
             ground_truths = []
             predictions = []
             for class_idx, class_name in enumerate(self.class_names):
-                ground_truth_path = os.path.join(self.test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
+                ground_truth_path = os.path.join(self.test_dir, row['ds_part'], "labels", class_name, filename.replace('.jpg', '.png'))
                 ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
                 try:
-                    ground_truth = (ground_truth  > 0)
+                    ground_truth = (ground_truth  < self.threshold * 255)
                 except:
                     print(ground_truth_path)
                 if class_name == 'background':
