@@ -10,7 +10,7 @@ from typing import List
 from research_code.params import args
 from research_code.train import train
 from research_code.predict_masks import predict
-from research_code.evaluate import evaluate
+from research_code.evaluate import evaluate, Evaluator
 from research_code.predict_masks_submission import generate_submission
 from research_code.utils import calculate_ndvi, calculate_ndwi, calculate_lightness
 
@@ -193,12 +193,12 @@ def run_experiment():
             network=args.network,
             add_classification_head=args.add_classification_head)
     print(f"Starting evaluation process of results in {prediction_dir}")
-    evaluate(test_dir=test_data_dir,
+    evaluator = Evaluator(test_dir=args.val_dir,
              experiment_dir=experiment_dir,
-             test_df_path=test_df_path,
+             test_df_path=args.dataset_df,
              threshold=args.threshold,
              class_names=args.class_names)
-
+    evaluator.evaluate_multiprocess()
     print("Generating submission")
     generate_submission(thresh=args.threshold, weights_path=weights_path)
 
