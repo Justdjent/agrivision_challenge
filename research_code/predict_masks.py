@@ -107,15 +107,15 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
     test_df = pd.read_csv(test_df_path)
 
     # filter this
-    #filtered = []
-    #for cls_name in class_names:
-    #    ds_df = test_df[test_df[cls_name] > 0]
-    #    filtered.append(ds_df)
+    filtered = []
+    for cls_name in class_names:
+       ds_df = test_df[test_df[cls_name] > 0]
+       filtered.append(ds_df)
     
     #test_df = pd.concat(filtered)
     #test_df.reset_index(drop=True, inplace=True)
     print(len(test_df))
-    test_df = test_df[test_df['ds_part'] == 'val']
+    # test_df = test_df[test_df['ds_part'] == 'val']
     nbr_test_samples = len(test_df)
     print(nbr_test_samples)
     for idx, row in tqdm(test_df.iterrows(), total=nbr_test_samples):

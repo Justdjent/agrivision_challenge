@@ -320,6 +320,96 @@ class DataGeneratorSingleOutput(DataGenerator_agrivision):
         return imagenet_utils.preprocess_input(batch_x, 'channels_last', mode='tf'), batch_y
 
 
+class DataGeneratorSeparateMasks(DataGenerator_agrivision):
+    'Generates data for Keras'
+
+    def __init__(self,
+                 dataset_df,
+                 classes,
+                 img_dir=None,
+                 batch_size=None,
+                 shuffle=False,
+                 reshape_size=None,
+                 crop_size=None,
+                 do_aug=False,
+                 activation=None,
+                 validate_pixels=True,
+                 channels=None,
+                 masks_dir=None):
+        'Initialization'
+        super().__init__(dataset_df, classes, img_dir, batch_size, shuffle, reshape_size, crop_size, do_aug)
+
+        if activation is None:
+            raise ValueError("Please pick activation function!")
+        self.activation = activation
+        self.validate_pixels = validate_pixels
+        self.channels = channels
+        self.masks_dir = masks_dir
+        self.on_epoch_end()
+
+    def _data_generation(self, list_IDs_temp):
+        'Generates data containing batch_size samples'  # X : (n_samples, *dim, n_channels)
+        # Initialization
+        train_batch = list_IDs_temp
+        batch_x = []
+        batch_y = []
+
+        for ind, item_data in train_batch.iterrows():
+            channels = read_channels(self.channels, item_data["name"], os.path.join(self.img_dir, item_data['ds_part']))
+
+            if self.validate_pixels:
+                not_valid_mask = self.read_masks_borders(item_data['name'], item_data['ds_part'])
+            else:
+                not_valid_mask = np.zeros((channels.shape[0], channels.shape[1]), dtype=np.bool)
+
+            channels[not_valid_mask] = 0
+            targets = np.zeros((channels.shape[0], channels.shape[1], len(self.classes)))
+            for idx, cls in enumerate(self.classes):
+                if self.masks_dir:
+                    mask_path = os.path.join(self.masks_dir, cls, item_data['name'])
+                    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+                else:
+                    mask_path = os.path.join(self.img_dir, item_data['ds_part'], 'labels', cls, item_data['name'])
+                    mask = cv2.imread(mask_path.replace(".jpg", ".png"), cv2.IMREAD_GRAYSCALE)
+
+                mask[not_valid_mask] = 0
+                mask = mask > 127
+                # mask = mask / 255
+                targets[:, :, idx] = mask
+
+            res = self.reshape_func(image=channels, mask=targets)
+            channels, targets = res['image'], res['mask']
+            if self.do_aug:
+                res = self.aug(image=channels, mask=targets)
+                channels, targets = res['image'], res['mask']
+            batch_y.append(targets)
+            batch_x.append(channels)
+
+        batch_x = np.array(batch_x, np.float32)
+        batch_y = np.array(batch_y, np.float32)
+
+        if self.activation == 'softmax':
+            # the class with higher value gets picked if several classes are present
+            # the following coefs were handpicked
+            class_priorities = {
+                "background": 1,
+                'weed_cluster': 2,
+                'waterway': 3,
+                'standing_water': 4,
+                'double_plant': 5,
+                'planter_skip': 6,
+                'cloud_shadow': 7
+            }
+            for idx, cls in enumerate(self.classes):
+                batch_y[:, :, :, idx] *= class_priorities[cls]
+            # (height, width, classes) -> (height, width)
+            highest_score_label = batch_y.argmax(axis=-1)
+            # (height, width) -> (height, width, classes)
+            batch_y = tf.one_hot(highest_score_label, len(self.classes), dtype=np.float32).numpy()
+
+        return imagenet_utils.preprocess_input(batch_x, 'channels_last', mode='tf'), batch_y
+
+
 class DataGeneratorClassificationHead(DataGeneratorSingleOutput):
     'Generates data for Keras'
 

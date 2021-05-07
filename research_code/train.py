@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
-from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorClassificationHead
+from research_code.data_generator import DataGeneratorSingleOutput, DataGeneratorClassificationHead, DataGeneratorSeparateMasks
 from research_code.losses import make_loss, dice_coef, dice_without_background
 from research_code.models import make_model
 from research_code.params import args
@@ -26,7 +26,7 @@ def setup_env():
             print(e)
 
 
-def train():
+def train(iteration=None, masks_dir=None, iter_df=None):
     if args.exp_name is None:
         raise ValueError("Please add a name for your experiment - exp_name argument")
     setup_env()
@@ -35,7 +35,11 @@ def train():
 
     if args.net_alias is not None:
         formatted_net_alias = '-{}-'.format(args.net_alias)
-    experiment_dir = os.path.join(args.experiments_dir, args.exp_name)
+    if iteration:
+        experiment_name = args.exp_name + "_{}".format(iteration)
+    else:
+        experiment_name = args.exp_name + "_{}".format(iteration)
+    experiment_dir = os.path.join(args.experiments_dir, experiment_name)
     model_dir = os.path.join(experiment_dir, args.models_dir)
     log_dir = os.path.join(experiment_dir, args.log_dir)
     if os.path.exists(log_dir) and len(os.listdir(log_dir)) > 0:
@@ -101,7 +105,7 @@ def train():
     if args.add_classification_head:
         generator_class = DataGeneratorClassificationHead
     else:
-        generator_class = DataGeneratorSingleOutput
+        generator_class = DataGeneratorSeparateMasks
 
     model.compile(loss=loss_list,
                   optimizer=optimizer,
@@ -133,10 +137,14 @@ def train():
         filtered.append(ds_df)
     
     dataset_df = pd.concat(filtered)
+    if isinstance(iter_df, pd.DataFrame):
+        dataset_df = dataset_df[dataset_df['name'].isin(iter_df['name'].tolist())]
     dataset_df.reset_index(drop=True, inplace=True)
-    train_df = dataset_df[dataset_df["ds_part"] == "train"]
-    
-    val_df = dataset_df[dataset_df["ds_part"] == "val"]
+    train_df = dataset_df
+    val_df = dataset_df
+    # train_df = dataset_df[dataset_df["ds_part"] == "train"]
+    #
+    # val_df = dataset_df[dataset_df["ds_part"] == "val"]
     print('{} in train_ids, {} in val_ids, total {}'.format(len(train_df), len(val_df), len(train_df) + len(val_df)))
 
     train_generator = generator_class(
@@ -150,7 +158,8 @@ def train():
         do_aug=args.use_aug,
         validate_pixels=True,
         activation=activation,
-        channels=args.channels
+        channels=args.channels,
+        masks_dir=masks_dir
     )
 
     val_generator = generator_class(
@@ -164,7 +173,8 @@ def train():
         do_aug=False,
         validate_pixels=True,
         activation=activation,
-        channels=args.channels
+        channels=args.channels,
+        masks_dir=masks_dir
     )
 
     best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
@@ -190,7 +200,7 @@ def train():
 
     del model
     tf.keras.backend.clear_session()
-    return experiment_dir, model_dir, args.exp_name
+    return experiment_dir, model_dir, experiment_name
 
 
 if __name__ == '__main__':
