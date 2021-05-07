@@ -19,3 +19,4 @@ gcsfs==0.8.0
 seaborn==0.11.0
 geopandas==0.9.0
 keras-resnet==0.1.0
+pandarallel==1.5.2
