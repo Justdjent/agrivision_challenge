@@ -22,13 +22,13 @@ arg('--learning_rate', type=float, default=0.001)
 arg('--batch_size', type=int, default=1)
 
 #TODO Merge train and val
-arg('--train_dir', default='/data/supervised/Agriculture-Vision-2021')
-arg('--val_dir', default='/data/supervised/Agriculture-Vision-2021')
-arg('--test_dir', default='/data/supervised/Agriculture-Vision-2021')
-arg('--dataset_df', default='/data/supervised/train_val_initial_2020-04-23.csv')
+arg('--train_dir', default='/app/Agriculture-Vision-2021')
+arg('--val_dir', default='/app/Agriculture-Vision-2021')
+arg('--test_dir', default='/app/Agriculture-Vision-2021')
+arg('--dataset_df', default='/app/train_val_initial_2020-04-23.csv')
 arg('--exclude_bad_labels_df')
 
-arg('--experiments_dir', default='/data/supervised/artifacts')
+arg('--experiments_dir', default='/app/Agriculture-Vision-2021/artifacts')
 arg('--class_names', nargs='+', default=['double_plant', 'planter_skip', 'water', 'waterway', 'weed_cluster', 'nutrient_deficiency', 'drydown', 'endrow', 'storm_damage'])
 arg('--models_dir', default='models')
 arg('--log_dir', default='logs')

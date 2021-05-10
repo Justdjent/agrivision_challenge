@@ -133,8 +133,11 @@ def evaluate(test_dir: str, experiment_dir: str, test_df_path: str, threshold: f
         for class_idx, class_name in enumerate(class_names):
             ground_truth_path = os.path.join(test_dir, "labels", class_name, filename.replace('.jpg', '.png'))
             ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
+            ground_truth[ground_truth < 127] = 0
+            ground_truth[ground_truth >= 127] = 255
             try:
-                ground_truth = (ground_truth  > 0)
+                # ground_truth = (ground_truth  > 0)
+                ground_truth = ground_truth > 127
             except:
                 print(ground_truth_path)
                 raise
@@ -187,6 +190,7 @@ class Evaluator:
         self.class_names = class_names
         self.class_names = self.class_names + ['background']
         self.prediction_dir = os.path.join(experiment_dir, "predictions")
+        self.output_csv = None
 
     def process_data(self, data, num_cores=4, parallel=True):
         """
@@ -239,7 +243,8 @@ class Evaluator:
                 ground_truth_path = os.path.join(self.test_dir, row['ds_part'], "labels", class_name, filename.replace('.jpg', '.png'))
                 ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
                 try:
-                    ground_truth = (ground_truth  < self.threshold * 255)
+                    # ground_truth = (ground_truth  < self.threshold * 255)
+                    ground_truth = ground_truth > 127
                 except:
                     print(ground_truth_path)
                 if class_name == 'background':
@@ -274,7 +279,18 @@ class Evaluator:
         :return:
         """
         test_df = pd.read_csv(self.test_df_path)
-        test_df = test_df[test_df['ds_part'] == 'val']
+        # filter this
+        filtered = []
+        for cls_name in self.class_names:
+            if cls_name == 'background':
+                continue
+            ds_df = test_df[test_df[cls_name] > 0]
+            filtered.append(ds_df)
+            
+        test_df = pd.concat(filtered)
+        test_df.reset_index(drop=True, inplace=True)
+        
+        # test_df = test_df[test_df['ds_part'] == 'val']
         confusion_matrix, df = self.process_data(test_df, num_cores=4, parallel=True)
 
         mean_iou, class_ious = m_iou(confusion_matrix, self.class_names)
@@ -287,6 +303,7 @@ class Evaluator:
         with open(os.path.join(self.prediction_dir, f"{output_filename}_mean_ious.json"), 'w') as f:
             json.dump(class_ious, f)
         df.to_csv(os.path.join(self.prediction_dir, output_csv), index=False)
+        self.output_csv = os.path.join(self.prediction_dir, output_csv)
         return x_title
 
     def get_best_threshold(self):

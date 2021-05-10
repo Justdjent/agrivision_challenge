@@ -112,8 +112,9 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
        ds_df = test_df[test_df[cls_name] > 0]
        filtered.append(ds_df)
     
-    #test_df = pd.concat(filtered)
-    #test_df.reset_index(drop=True, inplace=True)
+    test_df = pd.concat(filtered)
+    test_df.reset_index(drop=True, inplace=True)
+    # test_df = test_df[:16]
     print(len(test_df))
     # test_df = test_df[test_df['ds_part'] == 'val']
     nbr_test_samples = len(test_df)
@@ -135,6 +136,22 @@ def predict(experiment_dir: str, class_names: List[str], weights_path: str, test
             cv2.imwrite(save_path_masks, bin_mask)
     del model
     tf.keras.backend.clear_session()
+
+#reset Keras Session
+def reset_keras():
+    sess = tf.compat.v1.keras.backend.get_session()
+    tf.compat.v1.keras.backend.clear_session()
+    sess.close()
+    sess = tf.compat.v1.keras.backend.get_session()
+    try:
+        del classifier # this is from global space - change this as you need
+    except:
+        pass
+                                                                        # use the same config as you used to create the session
+    config = tf.compat.v1.ConfigProto()
+    config.gpu_options.per_process_gpu_memory_fraction = 1
+    config.gpu_options.visible_device_list = "0"
+    tf.compat.v1.keras.backend.set_session(tf.compat.v1.Session(config=config))
 
 if __name__ == '__main__':
     setup_env()

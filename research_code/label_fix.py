@@ -1,6 +1,7 @@
 import os
 import cv2
 import glob
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -161,8 +162,12 @@ def run_experiment():
     iterations_number = 6
     prev_mask_dir = None
     iteration_dataframe = None
+    weights_path = None
     for iteration in range(iterations_number):
-        experiment_dir, model_dir, experiment_name = train(iteration, masks_dir=prev_mask_dir, iter_df=iteration_dataframe)
+        if isinstance(iteration_dataframe, pd.DataFrame):
+            if len(iteration_dataframe) < args.batch_size:
+                print("not enoough images to continue")
+        experiment_dir, model_dir, experiment_name = train(iteration, masks_dir=prev_mask_dir, iter_df=iteration_dataframe, weights_path=weights_path)
         prediction_dir = os.path.join(experiment_dir, "predictions")
         best_model_name = find_best_model(model_dir)
         weights_path = os.path.join(model_dir, best_model_name)
@@ -179,12 +184,41 @@ def run_experiment():
                 network=args.network,
                 add_classification_head=args.add_classification_head)
         print(f"Starting evaluation process of results in {prediction_dir}")
-        confidence_df = calculate_confidence_for_preds(prediction_dir)
-        new_iteration_training = confidence_df[confidence_df['conf'] > 0.9]
-        new_iteration_training.reset_index(inplace=True, drop=True)
-        print("{} images after iteration {}".format(len(new_iteration_training), iteration))
-        prev_mask_dir = prediction_dir
-        iteration_dataframe = new_iteration_training
+        #TODO only for first class
+        # confidence_df = calculate_confidence_for_preds(prediction_dir, args.class_names[0])
+        # new_iteration_training = confidence_df[confidence_df['conf'] > 0.9]
+        # new_iteration_training.reset_index(inplace=True, drop=True)
+        evaluator = Evaluator(test_dir=args.val_dir,
+             experiment_dir=experiment_dir,
+             test_df_path=args.dataset_df,
+             threshold=args.threshold,
+             class_names=args.class_names)
+        evaluator.evaluate_multiprocess()
+
+        train_dir = os.path.join(experiment_dir, "train_labels")
+        # copy
+        shutil.copytree(prediction_dir, train_dir)
+        eval_df_path = evaluator.output_csv
+        eval_df = pd.read_csv(eval_df_path)
+        bad_quality_df = eval_df[eval_df[args.class_names[0]] < 0.5]
+        if len(bad_quality_df) > 0:
+            bad_quality_df.parallel_apply(copy_parralel, val_dir=args.val_dir, new_train_dir=train_dir, label=args.class_names[0], axis=1)
+        print("{} images after iteration {}".format(len(bad_quality_df), iteration))
+        prev_mask_dir = train_dir
+        #iteration_dataframe = new_iteration_training
+        #iteration_dataframe.to_csv(args.dataset_df.replace(".csv", "_{}_{}.csv".format(args.class_names[0], iteration)), index=False)
+
+
+def copy_parralel(row, val_dir, new_train_dir, label):
+    name = row['name']
+    name_path = os.path.join(val_dir, 'val', 'labels', label, name.replace(".jpg", ".png"))
+    output_name = os.path.join(new_train_dir, name)
+    os.remove(output_name)
+    if os.path.exists(name_path):
+        shutil.copy(name_path, output_name)
+    else:
+        name_path = os.path.join(val_dir, 'train', 'labels', label, name.replace(".jpg", ".png"))
+        shutil.copy(name_path, output_name)
 
 
 def get_confidence(row):
@@ -195,8 +229,8 @@ def get_confidence(row):
     return confidence
 
 
-def calculate_confidence_for_preds(predictions_path):
-    path_list = glob.glob(os.path.join(predictions_path, "*"))
+def calculate_confidence_for_preds(predictions_path, cls):
+    path_list = glob.glob(os.path.join(predictions_path, cls,  "*"))
     output_df = pd.DataFrame(columns=['path', 'name', 'conf'])
     output_df['path'] = path_list
     output_df['name'] = output_df['path'].str.split("/").str[-1]

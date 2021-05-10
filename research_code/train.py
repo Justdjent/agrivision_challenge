@@ -26,7 +26,7 @@ def setup_env():
             print(e)
 
 
-def train(iteration=None, masks_dir=None, iter_df=None):
+def train(iteration=None, masks_dir=None, iter_df=None, weights_path=None):
     if args.exp_name is None:
         raise ValueError("Please add a name for your experiment - exp_name argument")
     setup_env()
@@ -62,8 +62,11 @@ def train(iteration=None, masks_dir=None, iter_df=None):
                        classes=args.class_names)
 
     freeze_model(model, args.freeze_till_layer)
-    if args.weights is None:
+    if args.weights is None and not weights_path:
         print('No weights passed, training from scratch')
+    elif weights_path:
+        print('loading weights')
+        model.load_weights(weights_path, by_name=True)
     else:
         print('Loading weights from {}'.format(args.weights))
         model.load_weights(args.weights, by_name=True)
@@ -177,11 +180,11 @@ def train(iteration=None, masks_dir=None, iter_df=None):
         masks_dir=masks_dir
     )
 
-    best_model = ModelCheckpoint(best_model_file, monitor='val_loss',
+    best_model = ModelCheckpoint(best_model_file, monitor='val_dice_coef',
                                  verbose=1,
                                  save_best_only=True,
                                  save_weights_only=True,
-                                 mode='min')
+                                 mode='max')
 
     callbacks = [best_model,
                  EarlyStopping(patience=25, verbose=10),
@@ -199,9 +202,26 @@ def train(iteration=None, masks_dir=None, iter_df=None):
         workers=4)
 
     del model
+    # reset_keras()
     tf.keras.backend.clear_session()
     return experiment_dir, model_dir, experiment_name
 
+#reset Keras Session
+def reset_keras():
+    sess = tf.compat.v1.keras.backend.get_session()
+    tf.compat.v1.keras.backend.clear_session()
+    sess.close()
+    sess = tf.compat.v1.keras.backend.get_session()
+    try:
+        del classifier # this is from global space - change this as you need
+    except:
+        pass
+
+                                                    # use the same config as you used to create the session
+    config = tf.compat.v1.ConfigProto()
+    config.gpu_options.per_process_gpu_memory_fraction = 1
+    config.gpu_options.visible_device_list = "0"
+    tf.compat.v1.keras.backend.set_session(tf.compat.v1.Session(config=config))
 
 if __name__ == '__main__':
     train()
