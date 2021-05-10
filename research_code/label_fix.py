@@ -266,11 +266,7 @@ def get_confidence(row):
 
 
 def calculate_confidence_for_preds(predictions_path, cls):
-<<<<<<< HEAD
     path_list = glob.glob(os.path.join(predictions_path, cls,  "*"))
-=======
-    path_list = glob.glob(os.path.join(predictions_path, cls, "*"))
->>>>>>> c463ba3f4680356a95d206f6deaf18bbba3b605f
     output_df = pd.DataFrame(columns=['path', 'name', 'conf'])
     output_df['path'] = path_list
     output_df['name'] = output_df['path'].str.split("/").str[-1]
