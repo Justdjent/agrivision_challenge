@@ -50,6 +50,29 @@ def generate_ndvi(img_dir: str, input_df: pd.DataFrame, ds_part):
         ndvi = calculate_ndvi(rgb_img[:, :, 0], nir_img)
         cv2.imwrite(ndvi_path, ndvi)
 
+def generate_ndvi_parralel(img_dir: str, input_df: pd.DataFrame, ds_part):
+    ndvi_dir_path = os.path.join(img_dir, ds_part, "images", "ndvi")
+    if os.path.exists(ndvi_dir_path):
+        if len(os.listdir(ndvi_dir_path)) == len(input_df):
+            print("NDVI has been precomputed. Skipping NDVI computation")
+            return
+    else:
+        print("Precomputing NDVI channel")
+        os.makedirs(ndvi_dir_path)
+    input_df.parallel_apply(calc_ndvi, ds_part=ds_part, axis=1)
+
+def calc_ndvi(row, ds_part):
+    filename = row["name"]
+    rgb_path = os.path.join(img_dir, ds_part, "images", "rgb", filename)
+    nir_path = os.path.join(img_dir, ds_part, "images", "nir", filename)
+    ndvi_path = os.path.join(ndvi_dir_path, filename)
+    if os.path.exists(ndvi_path):
+        return
+    rgb_img = cv2.cvtColor(cv2.imread(rgb_path), cv2.COLOR_BGR2RGB)
+    nir_img = cv2.imread(nir_path, cv2.IMREAD_GRAYSCALE)
+    ndvi = calculate_ndvi(rgb_img[:, :, 0], nir_img)
+    cv2.imwrite(ndvi_path, ndvi)
+
 
 def generate_ndwi(img_dir: str, input_df: pd.DataFrame, ds_part):
     ndwi_dir_path = os.path.join(img_dir, ds_part, "images", "ndwi")
@@ -159,6 +182,19 @@ def calc_background(row, background_class_path, class_names, test_dir):
 
 
 def run_experiment():
+    dataset_df = pd.read_csv(args.dataset_df)
+    print(dataset_df.columns)
+    classes = list(args.class_names)
+    print(len(dataset_df))
+    if 'background' in classes:
+        classes.remove('background')
+    for ds_part, ds_dir in zip(['train', 'val'], [args.train_dir, args.val_dir]):
+        df = dataset_df[dataset_df['ds_part'] == ds_part]
+        precompute_background_class_parralel(ds_dir, df, classes, ds_part)
+        # generate_lightness(ds_dir, df, ds_part)
+        generate_ndvi_parralel(ds_dir, df, ds_part)
+        # generate_ndwi(ds_dir, df, ds_part)
+
     iterations_number = 6
     prev_mask_dir = None
     iteration_dataframe = None
@@ -230,7 +266,11 @@ def get_confidence(row):
 
 
 def calculate_confidence_for_preds(predictions_path, cls):
+<<<<<<< HEAD
     path_list = glob.glob(os.path.join(predictions_path, cls,  "*"))
+=======
+    path_list = glob.glob(os.path.join(predictions_path, cls, "*"))
+>>>>>>> c463ba3f4680356a95d206f6deaf18bbba3b605f
     output_df = pd.DataFrame(columns=['path', 'name', 'conf'])
     output_df['path'] = path_list
     output_df['name'] = output_df['path'].str.split("/").str[-1]
