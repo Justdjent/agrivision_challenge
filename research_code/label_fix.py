@@ -248,7 +248,7 @@ def run_experiment():
 def copy_parralel(row, val_dir, new_train_dir, label):
     name = row['name']
     name_path = os.path.join(val_dir, 'val', 'labels', label, name.replace(".jpg", ".png"))
-    output_name = os.path.join(new_train_dir, name)
+    output_name = os.path.join(new_train_dir, label, name)
     os.remove(output_name)
     if os.path.exists(name_path):
         shutil.copy(name_path, output_name)
