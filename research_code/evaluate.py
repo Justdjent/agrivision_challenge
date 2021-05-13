@@ -238,8 +238,11 @@ class Evaluator:
             for class_idx, class_name in enumerate(self.class_names):
                 ground_truth_path = os.path.join(self.test_dir, row['ds_part'], "labels", class_name, filename.replace('.jpg', '.png'))
                 ground_truth = cv2.imread(ground_truth_path, cv2.IMREAD_GRAYSCALE)
+                ground_truth[ground_truth < 127] = 0
+                ground_truth[ground_truth >= 127] = 255
                 try:
-                    ground_truth = (ground_truth  < self.threshold * 255)
+                    # ground_truth = (ground_truth  < self.threshold * 255)
+                    ground_truth = ground_truth > 127
                 except:
                     print(ground_truth_path)
                 if class_name == 'background':
